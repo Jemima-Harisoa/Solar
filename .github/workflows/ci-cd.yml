@@ -26,6 +26,7 @@ jobs:
       SQL_SERVER_PORT: 1433
       DATABASE_NAME: solar
       SQL_CONTAINER_NAME: solar-sqlserver
+      SKIP_INIT_ON_START: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,6 +61,28 @@ jobs:
           docker logs solar-sqlserver
           exit 1
 
+      - name: Initialize schema and seed data (deterministic)
+        shell: bash
+        run: |
+          set -e
+          docker exec solar-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost \
+            -U "$SQL_USER" \
+            -P "$SA_PASSWORD" \
+            -d master \
+            -C \
+            -b \
+            -i /scripts/init/01-schema.sql
+
+          docker exec solar-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost \
+            -U "$SQL_USER" \
+            -P "$SA_PASSWORD" \
+            -d master \
+            -C \
+            -b \
+            -i /scripts/init/02-data.sql
+
       - name: Validate SQL login with sqlcmd
         shell: bash
         run: |
@@ -68,7 +91,7 @@ jobs:
             -U "$SQL_USER" \
             -P "$SA_PASSWORD" \
             -C \
-            -Q "SELECT @@VERSION AS VersionInfo; SELECT DB_NAME() AS CurrentDb;"
+            -Q "IF DB_ID(N'$DATABASE_NAME') IS NULL BEGIN RAISERROR('Database not initialized', 16, 1); END; SELECT @@VERSION AS VersionInfo;"
 
       - name: Validate schema + seed data through Python connection
         run: python ci/check_db_connection.py
