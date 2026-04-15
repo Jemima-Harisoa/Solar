@@ -22,9 +22,10 @@ jobs:
       SA_PASSWORD: 'SolarDev!2026'
       SQL_USER: sa
       SQL_PASSWORD: 'SolarDev!2026'
-      SQL_SERVER_HOST: localhost
+      SQL_SERVER_HOST: 127.0.0.1
       SQL_SERVER_PORT: 1433
       DATABASE_NAME: solar
+      SQL_CONTAINER_NAME: solar-sqlserver
     steps:
       - name: Checkout
         uses: actions/checkout@v4

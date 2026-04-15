@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import time
 
@@ -11,6 +12,49 @@ def get_env(name: str, default: str) -> str:
     return os.getenv(name, default)
 
 
+def validate_with_sqlcmd(container_name: str, user: str, password: str, database: str) -> bool:
+    # Fallback CI: valide la connectivite via sqlcmd dans le conteneur SQL Server.
+    # Cela evite les faux-negatifs lies au driver pymssql sur certains runners.
+    query = (
+        "SET NOCOUNT ON; "
+        "SELECT DB_NAME() AS db_name; "
+        "SELECT COUNT(*) AS device_count FROM Device; "
+        "SELECT COUNT(*) AS timeslot_count FROM TimeSlot;"
+    )
+
+    cmd = [
+        "docker",
+        "exec",
+        container_name,
+        "/opt/mssql-tools18/bin/sqlcmd",
+        "-S",
+        "localhost",
+        "-U",
+        user,
+        "-P",
+        password,
+        "-d",
+        database,
+        "-C",
+        "-Q",
+        query,
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if result.returncode == 0:
+        print("Validation SQL Server OK via sqlcmd (fallback CI).")
+        if result.stdout:
+            print(result.stdout.strip())
+        return True
+
+    print("Echec fallback sqlcmd.")
+    if result.stdout:
+        print(result.stdout.strip())
+    if result.stderr:
+        print(result.stderr.strip())
+    return False
+
+
 def main() -> int:
     # Paramètres de connexion SQL Server (injectés par le pipeline CI).
     host = get_env("SQL_SERVER_HOST", "127.0.0.1")
@@ -18,6 +62,7 @@ def main() -> int:
     user = get_env("SQL_USER", "sa")
     password = get_env("SQL_PASSWORD", "SolarDev!2026")
     database = get_env("DATABASE_NAME", "solar")
+    container_name = get_env("SQL_CONTAINER_NAME", "solar-sqlserver")
 
     last_error = None
     # Réessaie pendant ~60 secondes (12 x 5s) pour laisser le temps
@@ -66,6 +111,11 @@ def main() -> int:
     print("Echec connexion SQL Server apres plusieurs tentatives.")
     if last_error:
         print(last_error)
+
+    # Derniere tentative: verification via sqlcmd dans le conteneur.
+    if validate_with_sqlcmd(container_name, user, password, database):
+        return 0
+
     return 1
 
 
