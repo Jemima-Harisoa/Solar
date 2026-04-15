@@ -1,0 +1,6 @@
+# fichier volumineux database
+database/log/
+database/secrets/
+database/.system
+# architecture projet
+.env
