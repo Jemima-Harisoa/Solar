@@ -178,3 +178,31 @@ Développer une application permettant de :
   - Capacité batterie
 - EnergyBalanceWh :
   - Production - consommation
+
+---
+
+## 8. CI/CD (Desktop Python + SQL Server Docker)
+
+Pipeline GitHub Actions ajouté pour la branche dev et main :
+
+- CI :
+  - Lance SQL Server avec Docker Compose
+  - Attend le healthcheck du conteneur
+  - Vérifie la connexion Python vers SQL Server
+  - Vérifie la présence des données d'initialisation
+
+- CD :
+  - Build de l'application desktop Python en exécutable Windows
+  - Publication de l'exécutable en artifact GitHub Actions
+
+Fichiers CI/CD :
+
+- .github/workflows/ci-cd.yml
+- ci/check_db_connection.py
+- requirements-dev.txt
+
+Déclenchement :
+
+- Push / Pull Request sur dev et main
+- Publication d'une release (pour le build CD)
+- Exécution manuelle (workflow_dispatch)
