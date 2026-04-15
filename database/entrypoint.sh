@@ -17,7 +17,7 @@ fi
 
 echo "Attente de SQL Server..."
 for i in {1..30}; do
-    if /opt/mssql-tools18/bin/sqlcmd -c "GO" -S localhost -U "$SQL_USER" -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then
+    if /opt/mssql-tools18/bin/sqlcmd -c "GO" -I -S localhost -U "$SQL_USER" -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then
         echo "SQL Server est pret."
         break
     fi
@@ -34,7 +34,7 @@ echo "Execution des scripts d'initialisation..."
 for script in /scripts/init/*.sql; do
     [ -f "$script" ] || continue
     echo "Running $script..."
-    /opt/mssql-tools18/bin/sqlcmd -c "GO" -S localhost -U "$SQL_USER" -P "$SA_PASSWORD" -C -b -i "$script"
+    /opt/mssql-tools18/bin/sqlcmd -c "GO" -I -S localhost -U "$SQL_USER" -P "$SA_PASSWORD" -C -b -i "$script"
 done
 
 echo "Initialisation terminee."
