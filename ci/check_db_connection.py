@@ -16,7 +16,7 @@ def main() -> int:
     host = get_env("SQL_SERVER_HOST", "127.0.0.1")
     port = int(get_env("SQL_SERVER_PORT", "1433"))
     user = get_env("SQL_USER", "sa")
-    password = get_env("SQL_PASSWORD", "Dev12345")
+    password = get_env("SQL_PASSWORD", "SolarDev!2026")
     database = get_env("DATABASE_NAME", "solar")
 
     last_error = None

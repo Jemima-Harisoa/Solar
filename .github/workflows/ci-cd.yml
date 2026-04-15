@@ -19,10 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ACCEPT_EULA: Y
-      SA_PASSWORD: Dev12345
+      SA_PASSWORD: 'SolarDev!2026'
       SQL_USER: sa
-      SQL_PASSWORD: Dev12345
-      SQL_SERVER_HOST: 127.0.0.1
+      SQL_PASSWORD: 'SolarDev!2026'
+      SQL_SERVER_HOST: localhost
       SQL_SERVER_PORT: 1433
       DATABASE_NAME: solar
     steps:
@@ -58,6 +58,16 @@ jobs:
           echo "SQL Server did not become healthy in time"
           docker logs solar-sqlserver
           exit 1
+
+      - name: Validate SQL login with sqlcmd
+        shell: bash
+        run: |
+          docker exec solar-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost \
+            -U "$SQL_USER" \
+            -P "$SA_PASSWORD" \
+            -C \
+            -Q "SELECT @@VERSION AS VersionInfo; SELECT DB_NAME() AS CurrentDb;"
 
       - name: Validate schema + seed data through Python connection
         run: python ci/check_db_connection.py
