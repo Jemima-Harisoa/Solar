@@ -66,6 +66,7 @@ jobs:
         run: |
           set -e
           docker exec solar-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+            -c "GO" \
             -S localhost \
             -U "$SQL_USER" \
             -P "$SA_PASSWORD" \
@@ -75,6 +76,7 @@ jobs:
             -i /scripts/init/01-schema.sql
 
           docker exec solar-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+            -c "GO" \
             -S localhost \
             -U "$SQL_USER" \
             -P "$SA_PASSWORD" \
@@ -87,6 +89,7 @@ jobs:
         shell: bash
         run: |
           docker exec solar-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+            -c "GO" \
             -S localhost \
             -U "$SQL_USER" \
             -P "$SA_PASSWORD" \
