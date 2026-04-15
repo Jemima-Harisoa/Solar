@@ -243,7 +243,7 @@ CREATE VIEW vw_EnergyBalance AS
 SELECT
     ec.ConsumptionDate AS BalanceDate,
     SUM(ec.EnergyConsumedWh) AS TotalConsumptionWh,
-    ISNULL(sp.TotalProductionWh, 0) AS TotalProductionWh,
+    ISNULL(MAX(sp.TotalProductionWh), 0) AS TotalProductionWh,
     night.NightConsumptionWh,
 
     -- Panneaux solaires nécessaires
@@ -259,7 +259,7 @@ SELECT
     END AS RequiredBatteryCapacityWh,
 
     -- Déficit
-    ISNULL(sp.TotalProductionWh, 0) - SUM(ec.EnergyConsumedWh) AS EnergyBalanceWh,
+    ISNULL(MAX(sp.TotalProductionWh), 0) - SUM(ec.EnergyConsumedWh) AS EnergyBalanceWh,
 
     sc.SolarPanelEfficiencyPct,
     sc.BatteryOvercapacityPct
@@ -289,7 +289,6 @@ CROSS JOIN (
 
 GROUP BY
     ec.ConsumptionDate,
-    sp.TotalProductionWh,
     night.NightConsumptionWh,
     sc.SolarPanelEfficiencyPct,
     sc.BatteryOvercapacityPct;
