@@ -4,3 +4,6 @@ database/secrets/
 database/.system
 # architecture projet
 .env
+
+# notes
+*.txt
