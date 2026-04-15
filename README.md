@@ -22,5 +22,5 @@ Q : est ce que les panneaux solaires produise une quantite d'enerigie par heure 
 => capacité de la batterie de stockage nécessaire pour couvrir les besoins de la maison pendant la nuit (majoree de 50%)
 
 # Technologies utilisées
-- Rust 
+- Python => desktop application
 - SqlServer 
