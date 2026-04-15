@@ -4,7 +4,7 @@
 */
 
 SET NOCOUNT ON;
-GO;
+GO
 
 IF DB_ID(N'solar') IS NULL
     CREATE DATABASE solar;
