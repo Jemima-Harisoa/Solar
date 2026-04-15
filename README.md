@@ -24,3 +24,72 @@ Q : est ce que les panneaux solaires produise une quantite d'enerigie par heure 
 # Technologies utilisées
 - Python => desktop application
 - SqlServer 
+
+# Structure de la base de données (Branche Dev)
+
+La structuration des données suit une architecture modulaire organisée autour de la gestion énergétique :
+
+## Tables de Configuration
+
+### TimeSlot
+- Définit les créneaux horaires d'une journée (jour 6-17h, soir 17-19h, nuit 19-6h)
+- Utilisée pour segmenter les consommations et productions d'énergie
+
+### SystemConfiguration
+- Tension secteur (GridVoltageV : 230V par défaut)
+- Rendement des panneaux solaires (SolarPanelEfficiencyPct : 40% par défaut)
+- Surcapacité batterie (BatteryOvercapacityPct : 50% par défaut)
+
+## Tables Matériels
+
+### DeviceType
+- Catégories d'appareils électriques (ex: Chauffage, Éclairage, etc.)
+
+### Device
+- Liste des appareils présents dans la maison
+- Puissance nominale (PowerW)
+- Statut (ACTIF, INACTIF, MAINTEN)
+- Date d'installation
+
+### DeviceUsageSchedule
+- Programme d'utilisation quotidien par appareil
+- DailyUsageHours par créneau horaire (jour/soir/nuit)
+- Permet de calculer la consommation énergétique estimée
+
+## Tables Consommations & Production
+
+### EnergyConsumption
+- Historique détaillé de consommation énergétique
+- EnergyConsumedWh : énergie consommée en Wh
+- DurationHours : durée réelle d'utilisation
+- Lié à Device et TimeSlot
+
+### SolarPanelProduction
+- Production d'énergie quotidienne des panneaux solaires
+- TotalPanelCapacityW : capacité installée
+- ProductionPercentage : rendement journalier
+- EnergyProducedWh : calculée automatiquement
+
+### BatteryStorage
+- Configuration des batteries de stockage
+- TotalCapacityWh : capacité totale
+- CurrentChargeWh : charge actuelle
+- ChargingEfficiencyPct : 95% par défaut
+- Statut (ACTIF, MAINTENANCE, DEFAUT)
+
+### BatteryMovement
+- Historique des mouvements charge/décharge
+- MovementType : CHARGE ou DECHARGE
+- Traçabilité complète : ChargeBeforeWh et ChargeAfterWh
+
+## Vues Calculs
+
+### vw_DeviceUsageSchedule
+- Agrège appareils + programme d'utilisation + créneaux horaires
+- DailyEnergyConsumptionWh calculée automatiquement (PowerW × DailyUsageHours)
+
+### vw_EnergyBalance
+- Bilan énergétique quotidien complet
+- TotalConsumptionWh vs TotalProductionWh
+- Calcul automatique : panneaux solaires nécessaires et batterie requise
+- EnergyBalanceWh : différence production - consommation
