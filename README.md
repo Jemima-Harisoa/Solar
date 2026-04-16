@@ -244,3 +244,134 @@ Méthodes :
 Import :
 ```python
 from connection import ServerConnect
+```
+
+### 7.3.2 Variables d'environnement (.env)
+
+Le fichier `.env` charge automatiquement les paramètres de connexion :
+
+```env
+SQL_SERVER_HOST=sqlserver           # Hostname du service SQL Server Docker
+SQL_SERVER_PORT=1433                # Port SQL Server (défaut 1433)
+SQL_USER=sa                         # Utilisateur SQL Server
+SQL_PASSWORD=Dev12345               # Mot de passe SQL
+SA_PASSWORD=SolarDev!2026           # Fallback si SQL_PASSWORD absent
+DATABASE_NAME=SolarDB               # Nom de la base de données
+```
+
+**Comportement** :
+- Normalisé au démarrage : `sqlserver` → `127.0.0.1` pour Docker local
+- Chargé via `app.config.load_dotenv_file()` dans `main.py`
+
+### 7.3.3 Gestion des transactions
+
+Chaque opération CRUD encapsule les transactions :
+```python
+def execute(self, sql: str, params: tuple = ()) -> None:
+    conn = self.connector.getConnection()
+    with conn.cursor() as cursor:
+        cursor.execute(sql, params)
+    self.connector.commit()
+```
+
+En cas d'erreur, la méthode `_safe()` dans `SolarApp` effectue un `rollback()` auto.
+
+---
+
+## 8. Historique de refactorisation (Branche actuelle)
+
+### 8.1 Renommage des fichiers CRUD
+
+Les fichiers CRUD ont été renommés pour simplifier la convention de nommage :
+
+- ❌ `base_crud.py` → ✅ `base.py`
+- ❌ `device_crud.py` → ✅ `device.py`
+- ❌ `device_type_crud.py` → ✅ `device_type.py`
+- ❌ `timeslot_crud.py` → ✅ `timeslot.py`
+- ❌ `device_usage_schedule_crud.py` → ✅ `device_usage_schedule.py`
+- ❌ `energy_consumption_crud.py` → ✅ `energy_consumption.py`
+- ❌ `system_configuration_crud.py` → ✅ `system_configuration.py`
+
+**Bénéfices** :
+- Noms plus courts et lisibles
+- Import simplifié
+- Cohérence avec les bonnes pratiques Python
+
+### 8.2 Commits de refactorisation
+
+5 commits groupés par fonctionnalité :
+
+1. **feat: Connection module and configuration**
+   - Module `ServerConnect` avec gestion des transactions
+   - Configuration du chargement d'environnement
+   - Normalisation du hostname Docker
+
+2. **feat: Data access layer (CRUD)**
+   - Classes de base et modèles CRUD pour tous les domaines
+   - Opérations de lecture/écriture SQL Server
+   - Requêtes conformes aux contraintes d'agrégation SQL Server
+
+3. **feat: Business logic layer (Services)**
+   - `EnergySpecService` pour les calculs d'énergie
+   - Formule de calcul panneau solaire (rendement)
+   - Formule de batterie (surcharge)
+
+4. **feat: User interface layer (UI)**
+   - SolarApp Tkinter à 5 onglets
+   - Liaison entre UI et CRUD
+   - Verrouillage progressif des fonctionnalités
+   - Gestion des erreurs avec rollback
+
+5. **chore: Application orchestration and entry point**
+   - Orchestrateur `main.py` minimal
+   - Separation of Concerns complète
+
+### 8.3 Validation
+
+Tous les fichiers compilent sans erreur :
+```bash
+python -m py_compile main.py app/ui/solar_app.py app/services/energy_spec_service.py app/crud/base.py
+```
+
+---
+
+## 9. Guide de démarrage
+
+### 9.1 Prérequis
+
+- Python 3.8+
+- SQL Server 2019+ (Docker recommandé)
+- `pymssql>=2.3.5`
+
+### 9.2 Installation
+
+```bash
+# Cloner le repo
+git clone <repo-url>
+cd Solar
+
+# Installer les dépendances
+pip install -r requirements-dev.txt
+
+# Démarrer SQL Server Docker
+docker compose up -d
+
+# Vérifier la connexion
+python ci/check_db_connection.py
+```
+
+### 9.3 Lancement
+
+```bash
+python main.py
+```
+
+La fenêtre Tkinter s'ouvre alors avec les 5 onglets de gestion énergétique.
+
+### 9.4 Workflow type
+
+1. **Ajouter des appareils** (onglet Matériels)
+2. **Paramétrer les créneaux horaires** (onglet Créneaux) — pré-remplis
+3. **Définir l'usage quotidien** (onglet Usage) — durée par créneau
+4. **Consulter l'historique** (onglet Historique) — données passées
+5. **Générer le bilan** (onglet Bilan) — panneaux et batterie nécessaires
