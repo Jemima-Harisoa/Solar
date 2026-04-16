@@ -11,7 +11,7 @@ GO
    CONFIGURATION
    ========================= */
 
-INSERT INTO SystemConfiguration (
+INSERT INTO SystemConfiguration ( 
     GridVoltageV,
     SolarPanelEfficiencyPct,
     BatteryOvercapacityPct,
