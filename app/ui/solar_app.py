@@ -104,6 +104,7 @@ class SolarApp:
         act.pack(fill="x", pady=(8, 0))
         ttk.Button(act, text="Ajouter", command=lambda: self._safe(self.add_device)).pack(side="left")
         ttk.Button(act, text="Rafraichir", command=lambda: self._safe(self.refresh_devices)).pack(side="left", padx=6)
+        ttk.Button(act, text="Reinitialiser", command=lambda: self._safe(self.reset_devices_data)).pack(side="left")
 
         cols = ("id", "code", "name", "type", "role", "power", "status", "date")
         self.device_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
@@ -142,6 +143,7 @@ class SolarApp:
         act.pack(fill="x", pady=(8, 0))
         ttk.Button(act, text="Ajouter", command=lambda: self._safe(self.add_slot)).pack(side="left")
         ttk.Button(act, text="Rafraichir", command=lambda: self._safe(self.refresh_slots)).pack(side="left", padx=6)
+        ttk.Button(act, text="Reinitialiser", command=lambda: self._safe(self.reset_slots_data)).pack(side="left")
 
         cols = ("id", "name", "start", "end", "desc")
         self.slot_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
@@ -177,6 +179,7 @@ class SolarApp:
         act.pack(fill="x", pady=(8, 0))
         ttk.Button(act, text="Ajouter / Mettre a jour", command=lambda: self._safe(self.upsert_usage)).pack(side="left")
         ttk.Button(act, text="Rafraichir", command=lambda: self._safe(self.refresh_usage)).pack(side="left", padx=6)
+        ttk.Button(act, text="Reinitialiser", command=lambda: self._safe(self.reset_usage_data)).pack(side="left")
 
         cols = ("id", "device", "slot", "hours", "consumption", "enabled")
         self.usage_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
@@ -198,6 +201,7 @@ class SolarApp:
 
         ttk.Label(top, text="Historique des depenses energetiques", font=("Segoe UI", 11, "bold")).pack(side="left")
         ttk.Button(top, text="Rafraichir", command=lambda: self._safe(self.refresh_history)).pack(side="right")
+        ttk.Button(top, text="Reinitialiser", command=lambda: self._safe(self.reset_history_data)).pack(side="right", padx=(0, 6))
 
         cols = ("id", "date", "device", "slot", "energy", "duration", "notes")
         self.history_tree = ttk.Treeview(self.tab_history, columns=cols, show="headings", height=20)
@@ -231,6 +235,9 @@ class SolarApp:
 
         ttk.Button(recap, text="Generer les besoins energetiques", command=lambda: self._safe(self.generate_spec)).grid(
             row=0, column=2, rowspan=3, padx=(20, 0), sticky="nsew"
+        )
+        ttk.Button(recap, text="Reinitialiser tout", command=lambda: self._safe(self.reset_all_data)).grid(
+            row=0, column=3, rowspan=3, padx=(8, 0), sticky="nsew"
         )
 
         cards = ttk.LabelFrame(self.tab_balance, text="Sorties principales", padding=10)
@@ -488,6 +495,68 @@ class SolarApp:
             self.balance_tree.insert("", "end", values=(name, f"{float(wh):.2f}"))
 
         self.status_var.set("Bilan energetique genere")
+
+    def _clear_balance_outputs(self) -> None:
+        self.total_var.set("0 Wh")
+        self.panel_var.set("0 W")
+        self.battery_var.set("0 Wh")
+        self.balance_tree.delete(*self.balance_tree.get_children())
+
+    def reset_devices_data(self) -> None:
+        if not messagebox.askyesno(
+            "Confirmation",
+            "Reinitialiser les materiels ? Cela supprimera aussi Usage et Historique lies aux materiels.",
+        ):
+            return
+
+        self.device_crud.truncate_devices_with_dependents()
+        self._clear_balance_outputs()
+        self.refresh_all()
+        self.status_var.set("Materiels reinitialises (avec tables dependantes)")
+
+    def reset_slots_data(self) -> None:
+        if not messagebox.askyesno(
+            "Confirmation",
+            "Reinitialiser les creneaux ? Cela supprimera aussi Usage, Historique, Production solaire et mouvements batterie.",
+        ):
+            return
+
+        self.timeslot_crud.truncate_timeslots_with_dependents()
+        self._clear_balance_outputs()
+        self.refresh_all()
+        self.status_var.set("Creneaux reinitialises (avec tables dependantes)")
+
+    def reset_usage_data(self) -> None:
+        if not messagebox.askyesno("Confirmation", "Reinitialiser toutes les lignes d'usage ?"):
+            return
+
+        self.usage_crud.truncate_usage()
+        self._clear_balance_outputs()
+        self.refresh_all()
+        self.status_var.set("Usage reinitialise")
+
+    def reset_history_data(self) -> None:
+        if not messagebox.askyesno("Confirmation", "Reinitialiser l'historique de consommation ?"):
+            return
+
+        self.history_crud.truncate_history()
+        self._clear_balance_outputs()
+        self.refresh_all()
+        self.status_var.set("Historique reinitialise")
+
+    def reset_all_data(self) -> None:
+        if not messagebox.askyesno(
+            "Confirmation",
+            "Reinitialiser toutes les donnees des onglets (Materiels, Creneaux, Usage, Historique) ?\n"
+            "Les types de materiels ne seront pas supprimes.",
+        ):
+            return
+
+        self.device_crud.truncate_devices_with_dependents()
+        self.timeslot_crud.truncate_timeslots_with_dependents()
+        self._clear_balance_outputs()
+        self.refresh_all()
+        self.status_var.set("Toutes les donnees des onglets ont ete reinitialisees")
 
     def _on_close(self) -> None:
         self.connector.Disconnect()
