@@ -1,0 +1,116 @@
+## Résumé
+
+Cette branche consolide l'application Solar autour de 3 axes:
+- architecture modulaire claire (config, connexion, CRUD, service, UI, orchestrateur),
+- correction de règles métier liées à l'usage énergétique,
+- documentation et maintien de cohérence entre code et fonctionnalités demandées.
+
+Les deux issues métier traitées sont:
+- limitation de `DailyUsageHours` à la durée réelle du créneau sélectionné,
+- prise en compte explicite des types d'appareils énergétiques (producteur, consommateur, stockage) dans l'UI et les calculs.
+
+## Type de changement
+
+- [x] Correction de bug
+- [x] Nouvelle fonctionnalité
+- [x] Refactorisation
+- [x] Documentation
+- [ ] CI/CD
+
+## Détails
+
+### Problème initial
+
+- Le code initial était trop monolithique et difficile à faire évoluer.
+- La règle métier de durée max par créneau n'était pas appliquée côté UI (`DailyUsageHours` validé seulement entre 0 et 24).
+- Les calculs ne distinguaient pas explicitement les rôles énergétiques des appareils (producteur/consommateur/stockage).
+- Le flux de connexion SQL dépendait fortement du contexte d'exécution local (Docker host vs Windows host).
+
+### Solution proposée
+
+#### 1. Refactorisation architecture
+
+- Séparation en couches:
+  - `app/config.py` (chargement `.env`, normalisation host SQL)
+  - `connection/server_connection.py` (connexion et transactions)
+  - `app/crud/*` (accès données par modèle)
+  - `app/services/energy_spec_service.py` (calcul métier)
+  - `app/ui/solar_app.py` (interface Tkinter)
+  - `main.py` (orchestration minimaliste)
+
+#### 2. Connexion SQL fiabilisée
+
+- Module `ServerConnect` opérationnel avec:
+  - `getConnection`
+  - `commit`
+  - `rollback`
+  - `Disconnect`
+- Gestion d'erreurs dédiée (`ServerConnectionError`, `ServerTransactionError`).
+- Chargement automatique `.env` et fallback mot de passe (`SQL_PASSWORD` puis `SA_PASSWORD`).
+- Normalisation `SQL_SERVER_HOST=sqlserver` vers `127.0.0.1` pour exécution locale.
+
+#### 3. Nommage des fichiers CRUD simplifié
+
+- Suppression du suffixe `_crud` dans les noms de fichiers:
+  - `base.py`, `device.py`, `device_type.py`, `timeslot.py`, `device_usage_schedule.py`, `energy_consumption.py`, `system_configuration.py`.
+
+#### 4. Correction des règles métier des 2 issues
+
+- **Issue 1 - durée max par créneau**:
+  - calcul de durée de créneau (y compris traversée de minuit) côté UI,
+  - validation métier: `DailyUsageHours <= durée du créneau`.
+- **Issue 2 - types énergétiques**:
+  - inférence du rôle énergétique (`PRODUCTEUR`, `CONSOMMATEUR`, `STOCKAGE`) depuis `DeviceType`,
+  - affichage du rôle dans l'onglet Matériels,
+  - filtrage des matériels proposés dans l'onglet Usage (consommateurs uniquement),
+  - calcul de consommation par créneau ajusté pour exclure producteur/stockage.
+
+#### 5. Calcul énergétique
+
+- Règles métier README conservées:
+  - `requiredPanelPower = totalConsumptionWh * 100 / solarPanelEfficiencyPct`
+  - `requiredBatteryWh = nightConsumptionWh * (1 + batteryOvercapacityPct/100)`
+- Correctif SQL d'agrégation appliqué (`GROUP BY` conforme SQL Server).
+
+#### 6. Documentation
+
+- README enrichi avec architecture, règles implémentées, renommage CRUD, guide de démarrage et workflow utilisateur.
+
+## Vérifications effectuées
+
+- [x] L’application démarre correctement
+- [ ] Les tests passent (si applicables)
+- [x] La connexion SQL Server est validée (si concerné)
+- [x] La documentation a été mise à jour (si nécessaire)
+
+Preuves de vérification:
+- `docker compose down -v ; docker compose up -d` exécuté avec succès.
+- `python main.py` exécuté avec succès (UI lancée).
+- Compilation Python sans erreur sur les modules impactés (`py_compile`).
+
+## Impacts
+
+- [x] Aucun impact cassant
+- [ ] Impact potentiel sur la base de données
+- [ ] Impact potentiel sur le pipeline CI/CD
+
+Notes d'impact:
+- Pas de migration SQL structurelle introduite dans cette PR.
+- Changements principalement applicatifs (validation UI, logique CRUD/service, organisation du code).
+
+## Captures / preuves (optionnel)
+
+- Historique des commits de la branche incluant:
+  - `feat: Connection module and configuration`
+  - `feat: Data access layer (CRUD)`
+  - `feat: Business logic layer (Services)`
+  - `feat: User interface layer (UI)`
+  - `chore: Application orchestration and entry point`
+  - `docs: Update README with environment variables and transaction management details`
+  - `fix: Enhance device management with energy role inference and consumer device listing`
+
+## Checklist finale
+
+- [x] Le code est relu
+- [x] Les fichiers inutiles ont été retirés
+- [x] Le nom de la PR est clair
