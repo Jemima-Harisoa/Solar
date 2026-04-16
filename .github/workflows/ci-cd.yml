@@ -2,13 +2,9 @@ name: CI-CD Desktop Python
 
 on:
   push:
-    branches:
-      - main
-      - dev
+    branches: [main, dev]
   pull_request:
-    branches:
-      - main
-      - dev
+    branches: [main, dev]
   workflow_dispatch:
   release:
     types: [published]
@@ -18,88 +14,48 @@ jobs:
     name: CI - Tests DB SQL Server Docker
     runs-on: ubuntu-latest
     env:
-      ACCEPT_EULA: Y
-      SA_PASSWORD: 'SolarDev!2026'
+      SA_PASSWORD: "SolarDev!2026"
       SQL_USER: sa
-      SQL_PASSWORD: 'SolarDev!2026'
+      SQL_PASSWORD: "SolarDev!2026"
       SQL_SERVER_HOST: 127.0.0.1
-      SQL_SERVER_PORT: 1433
       DATABASE_NAME: solar
       SQL_CONTAINER_NAME: solar-sqlserver
-      SKIP_INIT_ON_START: '1'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
 
-      - name: Start SQL Server with Docker Compose
-        run: docker compose up -d sqlserver
-
-      - name: Wait for SQL Server healthcheck
-        shell: bash
+      - name: Start SQL Server
         run: |
-          set -e
-          for i in {1..40}; do
-            status=$(docker inspect --format='{{json .State.Health.Status}}' solar-sqlserver || echo '"starting"')
-            echo "Health status: ${status}"
-            if [ "$status" = '"healthy"' ]; then
-              echo "SQL Server is healthy"
-              exit 0
-            fi
+          SKIP_INIT_ON_START=1 docker compose up -d sqlserver
+
+      - name: Wait for SQL Server
+        run: |
+          for i in {1..20}; do
+            status=$(docker inspect --format='{{json .State.Health.Status}}' solar-sqlserver 2>/dev/null || echo '"starting"')
+            [ "$status" = '"healthy"' ] && echo "SQL Server ready" && exit 0
+            echo "Attempt $i/20: $status"
             sleep 5
           done
-          echo "SQL Server did not become healthy in time"
           docker logs solar-sqlserver
           exit 1
 
-      - name: Initialize schema and seed data (deterministic)
-        shell: bash
+      - name: Initialize schema and seed data
         run: |
-          set -e
-          docker exec solar-sqlserver /opt/mssql-tools18/bin/sqlcmd \
-            -c "GO" \
-            -I \
-            -S localhost \
-            -U "$SQL_USER" \
-            -P "$SA_PASSWORD" \
-            -d master \
-            -C \
-            -b \
-            -i /scripts/init/01-schema.sql
+          run_sql() {
+            docker exec solar-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+              -S localhost -U "$SQL_USER" -P "$SA_PASSWORD" -C -b "$@"
+          }
+          run_sql -i /scripts/init/01-schema.sql
+          run_sql -i /scripts/init/02-data.sql
 
-          docker exec solar-sqlserver /opt/mssql-tools18/bin/sqlcmd \
-            -c "GO" \
-            -I \
-            -S localhost \
-            -U "$SQL_USER" \
-            -P "$SA_PASSWORD" \
-            -d master \
-            -C \
-            -b \
-            -i /scripts/init/02-data.sql
-
-      - name: Validate SQL login with sqlcmd
-        shell: bash
-        run: |
-          docker exec solar-sqlserver /opt/mssql-tools18/bin/sqlcmd \
-            -c "GO" \
-            -I \
-            -S localhost \
-            -U "$SQL_USER" \
-            -P "$SA_PASSWORD" \
-            -C \
-            -Q "IF DB_ID(N'$DATABASE_NAME') IS NULL BEGIN RAISERROR('Database not initialized', 16, 1); END; SELECT @@VERSION AS VersionInfo;"
-
-      - name: Validate schema + seed data through Python connection
+      - name: Validate DB connection and seed data
         run: python ci/check_db_connection.py
 
       - name: Stop containers
@@ -111,24 +67,21 @@ jobs:
     runs-on: windows-latest
     needs: ci
     if: github.event_name == 'release' || github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install build dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
 
-      - name: Build desktop executable
+      - name: Build executable
         run: pyinstaller --onefile --name solar-desktop main.py
 
-      - name: Upload build artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: solar-desktop-windows
