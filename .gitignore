@@ -8,3 +8,9 @@ database/.system
 # notes
 *.txt
 !requirements-dev.txt
+
+# todo
+TODO
+
+# fichier cache
+__pycache__

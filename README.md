@@ -10,43 +10,49 @@ Développer une application permettant de :
 
 ---
 
-## 2. Calcul de la consommation énergétique
+## 2. Fonctionnalités principales
 
-### 2.1 Par matériel
+### 2.1 Calcul de la consommation énergétique
+
+#### Par matériel
 - Basé sur :
   - La puissance de l’appareil
   - Le temps d’utilisation
 
-### 2.2 Par tranche horaire
+#### Par tranche horaire
 - Journée : 6h - 17h
 - Soir : 17h - 19h
 - Nuit : 19h - 6h
 
 ---
 
-## 3. Affichage des résultats
+### 2.2 Affichage des résultats
 
-### 3.1 Par matériel
+#### Par matériel
 - Consommation totale
 - Consommation par appareil selon l’usage
 
-### 3.2 Par tranche horaire
+#### Par tranche horaire
 - Consommation totale
 - Consommation par période (jour / soir / nuit)
 
 ---
 
-## 4. Bilan des besoins énergétiques
+## 3. Bilan des besoins énergétiques
 
-### 4.1 Énergie totale nécessaire
+### 3.1 Énergie totale nécessaire
 - Correspond à la consommation totale de la maison
 
-### 4.2 Panneaux solaires
-- Hypothèse :
-  - 1 panneau produit 40% de l’énergie qu’il fournit
-- Exemple :
-  - Besoin : 1000W
-  - Nécessaire : 2500W de panneaux solaires
+---
+
+### 3.2 Panneaux solaires
+
+#### Hypothèse
+- 1 panneau produit 40% de l’énergie qu’il fournit
+
+#### Exemple
+- Besoin : 1000W  
+- Nécessaire : 2500W de panneaux solaires
 
 #### Répartition de la production
 - Journée (6h - 17h) :
@@ -55,34 +61,34 @@ Développer une application permettant de :
 - Soir (17h - 19h) :
   - Production réduite à 50%
 
-#### Question / hypothèse
-- Production horaire :
-  - Production totale journalière = production par heure × nombre d’heures
-  - Exemple :
-    - 2500W / 11h = 227W par heure
+#### Hypothèse de production horaire
+- Production totale journalière = production horaire × nombre d’heures
+- Exemple :
+  - 2500W / 11h = 227W par heure
 
 ---
 
-### 4.3 Batterie de stockage
-- Utilisation :
-  - Nuit
-  - Journées nuageuses
+### 3.3 Batterie de stockage
 
-- Capacité :
-  - Consommation nocturne majorée de 50%
+#### Utilisation
+- Nuit
+- Journées nuageuses
+
+#### Capacité
+- Consommation nocturne majorée de 50%
 - Exemple :
-  - Consommation nuit : 500W
+  - Consommation nuit : 500W  
   - Capacité batterie : 750W
 
 #### Fonctionnement
 - Journée :
   - Recharge continue par les panneaux
-- Problème :
-  - Si batterie pleine → perte d’énergie produite
+- Limite :
+  - Batterie pleine → perte d’énergie produite
 
 ---
 
-## 5. Résultats du bilan énergétique
+### 3.4 Résultats attendus
 
 - Consommation totale de la maison
 - Puissance totale des panneaux solaires nécessaires
@@ -90,52 +96,51 @@ Développer une application permettant de :
 
 ---
 
-## 6. Technologies utilisées
+## 4. Technologies utilisées
 
 - Python (application desktop)
 - SQL Server
 
 ---
 
-## 7. Structure de la base de données (Branche Dev)
+## 5. Structure de la base de données (Branche Dev)
 
-### 7.1 Tables de configuration
+### 5.1 Tables de configuration
 
 #### TimeSlot
-- Définition des créneaux horaires :
+- Créneaux horaires :
   - Jour (6h - 17h)
   - Soir (17h - 19h)
   - Nuit (19h - 6h)
 
 #### SystemConfiguration
-- GridVoltageV : 230V (par défaut)
+- GridVoltageV : 230V
 - SolarPanelEfficiencyPct : 40%
 - BatteryOvercapacityPct : 50%
 
 ---
 
-### 7.2 Tables matériels
+### 5.2 Tables matériels
 
 #### DeviceType
-- Catégories d’appareils (chauffage, éclairage, etc.)
+- Catégories d’appareils
 
 #### Device
-- Liste des appareils
-- PowerW : puissance
+- Appareils de la maison
+- PowerW
 - Statut : ACTIF, INACTIF, MAINTENANCE
 - Date d’installation
 
 #### DeviceUsageSchedule
 - Programme d’utilisation quotidien
 - DailyUsageHours par tranche horaire
-- Sert au calcul de consommation
 
 ---
 
-### 7.3 Tables consommation et production
+### 5.3 Tables consommation et production
 
 #### EnergyConsumption
-- Historique des consommations
+- Historique de consommation
 - EnergyConsumedWh
 - DurationHours
 - Lié à Device et TimeSlot
@@ -147,7 +152,7 @@ Développer une application permettant de :
 - EnergyProducedWh (calculée)
 
 #### BatteryStorage
-- Configuration des batteries
+- Batteries
 - TotalCapacityWh
 - CurrentChargeWh
 - ChargingEfficiencyPct : 95%
@@ -160,7 +165,7 @@ Développer une application permettant de :
 
 ---
 
-### 7.4 Vues de calcul
+### 5.4 Vues de calcul
 
 #### vw_DeviceUsageSchedule
 - Agrégation :
@@ -181,28 +186,61 @@ Développer une application permettant de :
 
 ---
 
-## 8. CI/CD (Desktop Python + SQL Server Docker)
+## 6. CI/CD (Desktop Python + SQL Server Docker)
 
-Pipeline GitHub Actions ajouté pour la branche dev et main :
+### 6.1 Objectif
 
-- CI :
-  - Lance SQL Server avec Docker Compose
-  - Attend le healthcheck du conteneur
-  - Vérifie la connexion Python vers SQL Server
-  - Vérifie la présence des données d'initialisation
+Automatiser :
+- Les vérifications de connexion à la base
+- Le build de l’application
 
-- CD :
-  - Build de l'application desktop Python en exécutable Windows
-  - Publication de l'exécutable en artifact GitHub Actions
+---
 
-Fichiers CI/CD :
+### 6.2 CI
 
-- .github/workflows/ci-cd.yml
-- ci/check_db_connection.py
-- requirements-dev.txt
+- Lancement de SQL Server avec Docker Compose
+- Attente du healthcheck du conteneur
+- Vérification de la connexion Python vers SQL Server
+- Vérification des données d’initialisation
 
-Déclenchement :
+---
 
-- Push / Pull Request sur dev et main
-- Publication d'une release (pour le build CD)
-- Exécution manuelle (workflow_dispatch)
+### 6.3 CD
+
+- Build de l’application desktop Python (exécutable Windows)
+- Publication en artifact GitHub Actions
+
+---
+
+### 6.4 Fichiers
+
+- `.github/workflows/ci-cd.yml`
+- `ci/check_db_connection.py`
+- `requirements-dev.txt`
+
+---
+
+### 6.5 Déclenchement
+
+- Push / Pull Request sur `dev` et `main`
+- Release (pour le build CD)
+- Exécution manuelle (`workflow_dispatch`)
+
+---
+
+## 7. Gestion de la connexion SQL
+
+### 7.1 Module de connexion
+
+- Fichier : `connection/server_connection.py`
+- Classe : `ServerConnect`
+
+Méthodes :
+- `getConnection()`
+- `commit()`
+- `rollback()`
+- `Disconnect()`
+
+Import :
+```python
+from connection import ServerConnect
