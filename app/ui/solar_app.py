@@ -30,6 +30,8 @@ class SolarApp:
         self.device_map: dict[str, int] = {}
         self.slot_map: dict[str, int] = {}
         self.device_type_map: dict[str, int] = {}
+        self.device_type_role_map: dict[str, str] = {}
+        self.slot_duration_map: dict[str, float] = {}
 
         self.status_var = tk.StringVar(value="Pret")
 
@@ -85,10 +87,14 @@ class SolarApp:
         self.device_date_var = tk.StringVar(value=date.today().isoformat())
         self.device_status_var = tk.StringVar(value="ACTIF")
         self.device_desc_var = tk.StringVar()
+        self.device_role_var = tk.StringVar(value="-")
 
         self._entry(left, "Code", self.device_code_var)
         self._entry(left, "Nom", self.device_name_var)
         self.device_type_combo = self._combo(left, "Type", self.device_type_var)
+        self.device_type_combo.bind("<<ComboboxSelected>>", lambda _event: self._update_selected_type_role())
+        ttk.Label(left, text="Role energetique").pack(anchor="w", pady=(4, 0))
+        ttk.Label(left, textvariable=self.device_role_var, font=("Segoe UI", 10, "bold")).pack(anchor="w")
         self._entry(left, "Puissance (W)", self.device_power_var)
         self._entry(left, "Date installation (YYYY-MM-DD)", self.device_date_var)
         self._combo(left, "Statut", self.device_status_var, ["ACTIF", "INACTIF", "MAINTEN"])
@@ -99,13 +105,14 @@ class SolarApp:
         ttk.Button(act, text="Ajouter", command=lambda: self._safe(self.add_device)).pack(side="left")
         ttk.Button(act, text="Rafraichir", command=lambda: self._safe(self.refresh_devices)).pack(side="left", padx=6)
 
-        cols = ("id", "code", "name", "type", "power", "status", "date")
+        cols = ("id", "code", "name", "type", "role", "power", "status", "date")
         self.device_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
         for col, title, width in [
             ("id", "ID", 60),
             ("code", "Code", 100),
             ("name", "Materiel", 220),
             ("type", "Type", 140),
+            ("role", "Role", 120),
             ("power", "Puissance W", 110),
             ("status", "Statut", 100),
             ("date", "Installation", 110),
@@ -273,6 +280,12 @@ class SolarApp:
         ttk.Label(box, text=title).pack(anchor="w")
         ttk.Label(box, textvariable=value_var, font=("Segoe UI", 14, "bold")).pack(anchor="w")
 
+    @staticmethod
+    def _timeslot_duration_hours(start_hour: int, end_hour: int) -> float:
+        if end_hour > start_hour:
+            return float(end_hour - start_hour)
+        return float((24 - start_hour) + end_hour)
+
     def _safe(self, fn) -> None:
         try:
             fn()
@@ -311,22 +324,32 @@ class SolarApp:
             self.notebook.tab(4, state="normal")
 
     def refresh_device_types(self) -> None:
-        rows = self.device_type_crud.list_types()
-        self.device_type_map = {name: type_id for type_id, name in rows}
+        rows = self.device_type_crud.list_types_with_role()
+        self.device_type_map = {name: type_id for type_id, name, _, _ in rows}
+        self.device_type_role_map = {name: role for _, name, _, role in rows}
         names = list(self.device_type_map.keys())
         self.device_type_combo["values"] = names
         if names and not self.device_type_var.get():
             self.device_type_var.set(names[0])
+        self._update_selected_type_role()
+
+    def _update_selected_type_role(self) -> None:
+        selected = self.device_type_var.get().strip()
+        self.device_role_var.set(self.device_type_role_map.get(selected, "-"))
 
     def refresh_devices(self) -> None:
         rows = self.device_crud.list_devices()
         self.device_tree.delete(*self.device_tree.get_children())
+        for row in rows:
+            display_row = (row[0], row[1], row[2], row[3], row[5], row[6], row[7], row[8])
+            self.device_tree.insert("", "end", values=display_row)
+
+        usage_rows = self.device_crud.list_consumer_devices()
         self.device_map.clear()
         labels = []
-        for row in rows:
-            self.device_tree.insert("", "end", values=row)
-            label = f"{row[2]} ({row[1]})"
-            self.device_map[label] = row[0]
+        for device_id, device_code, device_name in usage_rows:
+            label = f"{device_name} ({device_code})"
+            self.device_map[label] = device_id
             labels.append(label)
         self.usage_device_combo["values"] = labels
         if labels and not self.usage_device_var.get():
@@ -336,11 +359,13 @@ class SolarApp:
         rows = self.timeslot_crud.list_timeslots()
         self.slot_tree.delete(*self.slot_tree.get_children())
         self.slot_map.clear()
+        self.slot_duration_map.clear()
         labels = []
         for row in rows:
             self.slot_tree.insert("", "end", values=row)
             label = f"{row[1]} ({row[2]}-{row[3]})"
             self.slot_map[label] = row[0]
+            self.slot_duration_map[label] = self._timeslot_duration_hours(int(row[2]), int(row[3]))
             labels.append(label)
         self.usage_slot_combo["values"] = labels
         if labels and not self.usage_slot_var.get():
@@ -420,8 +445,13 @@ class SolarApp:
             raise ValueError("Selection du materiel invalide.")
         if slot_label not in self.slot_map:
             raise ValueError("Selection du creneau invalide.")
-        if hours < 0 or hours > 24:
-            raise ValueError("DailyUsageHours doit etre entre 0 et 24.")
+        max_slot_hours = self.slot_duration_map.get(slot_label)
+        if max_slot_hours is None:
+            raise ValueError("Duree du creneau introuvable.")
+        if hours < 0:
+            raise ValueError("DailyUsageHours doit etre superieur ou egal a 0.")
+        if hours > max_slot_hours:
+            raise ValueError(f"DailyUsageHours depasse la duree du creneau selectionne ({max_slot_hours:.2f} h max).")
 
         self.usage_crud.upsert_usage(
             device_id=self.device_map[device_label],

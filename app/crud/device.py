@@ -5,9 +5,45 @@ class DeviceCrud(BaseCrud):
     def list_devices(self) -> list[tuple]:
         return self.query(
             """
-            SELECT d.DeviceId, d.DeviceCode, d.DeviceName, dt.TypeName, d.PowerW, d.Status, d.InstallationDate
+            SELECT d.DeviceId,
+                   d.DeviceCode,
+                   d.DeviceName,
+                   dt.TypeName,
+                   dt.Category,
+                   CASE
+                       WHEN UPPER(dt.TypeName) LIKE N'%PANNEAU%'
+                         OR UPPER(dt.TypeName) LIKE N'%SOLAIRE%'
+                         OR UPPER(dt.Category) LIKE N'%PRODUCT%'
+                           THEN N'PRODUCTEUR'
+                       WHEN UPPER(dt.TypeName) LIKE N'%BATTER%'
+                         OR UPPER(dt.TypeName) LIKE N'%STOCK%'
+                         OR UPPER(dt.Category) LIKE N'%STOCK%'
+                           THEN N'STOCKAGE'
+                       ELSE N'CONSOMMATEUR'
+                   END AS EnergyRole,
+                   d.PowerW,
+                   d.Status,
+                   d.InstallationDate
             FROM Device d
             INNER JOIN DeviceType dt ON dt.DeviceTypeId = d.DeviceTypeId
+            ORDER BY d.DeviceName
+            """
+        )
+
+    def list_consumer_devices(self) -> list[tuple]:
+        return self.query(
+            """
+            SELECT d.DeviceId, d.DeviceCode, d.DeviceName
+            FROM Device d
+            INNER JOIN DeviceType dt ON dt.DeviceTypeId = d.DeviceTypeId
+            WHERE NOT (
+                UPPER(dt.TypeName) LIKE N'%PANNEAU%'
+                OR UPPER(dt.TypeName) LIKE N'%SOLAIRE%'
+                OR UPPER(dt.Category) LIKE N'%PRODUCT%'
+                OR UPPER(dt.TypeName) LIKE N'%BATTER%'
+                OR UPPER(dt.TypeName) LIKE N'%STOCK%'
+                OR UPPER(dt.Category) LIKE N'%STOCK%'
+            )
             ORDER BY d.DeviceName
             """
         )

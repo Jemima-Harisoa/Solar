@@ -16,7 +16,18 @@ class DeviceUsageScheduleCrud(BaseCrud):
         )
 
     def sum_enabled_usage_hours(self) -> float:
-        return float(self.query("SELECT ISNULL(SUM(DailyUsageHours), 0) FROM DeviceUsageSchedule WHERE IsEnabled = 1")[0][0])
+        rows = self.query(
+            """
+            SELECT ISNULL(SUM(slot_max.MaxHours), 0)
+            FROM (
+                SELECT TimeSlotId, MAX(DailyUsageHours) AS MaxHours
+                FROM DeviceUsageSchedule
+                WHERE IsEnabled = 1
+                GROUP BY TimeSlotId
+            ) AS slot_max
+            """
+        )
+        return float(rows[0][0])
 
     def upsert_usage(self, device_id: int, timeslot_id: int, daily_usage_hours: float, is_enabled: int) -> None:
         self.execute(
@@ -46,10 +57,28 @@ class DeviceUsageScheduleCrud(BaseCrud):
     def list_consumption_by_slot(self) -> list[tuple]:
         return self.query(
             """
-            SELECT ts.SlotName, ISNULL(SUM(d.PowerW * dus.DailyUsageHours), 0) AS ConsumptionWh
+            SELECT ts.SlotName,
+                   ISNULL(
+                       SUM(
+                           CASE WHEN dt.DeviceTypeId IS NULL
+                                THEN 0
+                                ELSE d.PowerW * dus.DailyUsageHours
+                           END
+                       ),
+                       0
+                   ) AS ConsumptionWh
             FROM TimeSlot ts
             LEFT JOIN DeviceUsageSchedule dus ON dus.TimeSlotId = ts.TimeSlotId AND dus.IsEnabled = 1
             LEFT JOIN Device d ON d.DeviceId = dus.DeviceId
+            LEFT JOIN DeviceType dt ON dt.DeviceTypeId = d.DeviceTypeId
+                                   AND NOT (
+                                       UPPER(dt.TypeName) LIKE N'%PANNEAU%'
+                                       OR UPPER(dt.TypeName) LIKE N'%SOLAIRE%'
+                                       OR UPPER(dt.Category) LIKE N'%PRODUCT%'
+                                       OR UPPER(dt.TypeName) LIKE N'%BATTER%'
+                                       OR UPPER(dt.TypeName) LIKE N'%STOCK%'
+                                       OR UPPER(dt.Category) LIKE N'%STOCK%'
+                                   )
             GROUP BY ts.TimeSlotId, ts.SlotName
             ORDER BY ts.TimeSlotId
             """
