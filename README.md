@@ -375,3 +375,67 @@ La fenêtre Tkinter s'ouvre alors avec les 5 onglets de gestion énergétique.
 3. **Définir l'usage quotidien** (onglet Usage) — durée par créneau
 4. **Consulter l'historique** (onglet Historique) — données passées
 5. **Générer le bilan** (onglet Bilan) — panneaux et batterie nécessaires
+
+---
+
+## 10. Réinitialisation des données depuis l'interface
+
+Des boutons de réinitialisation sont disponibles dans les onglets pour éviter un script manuel à chaque purge.
+
+### 10.1 Onglet Matériels
+
+- Bouton : `Reinitialiser`
+- Supprime : `Device`
+- Supprime aussi les dépendances : `DeviceUsageSchedule`, `EnergyConsumption`
+- Conserve : `DeviceType`
+
+### 10.2 Onglet Créneaux
+
+- Bouton : `Reinitialiser`
+- Supprime : `TimeSlot`
+- Supprime aussi les dépendances : `DeviceUsageSchedule`, `EnergyConsumption`, `SolarPanelProduction`, `BatteryMovement`
+
+### 10.3 Onglet Usage
+
+- Bouton : `Reinitialiser`
+- Supprime : `DeviceUsageSchedule`
+
+### 10.4 Onglet Historique
+
+- Bouton : `Reinitialiser`
+- Supprime : `EnergyConsumption`
+
+### 10.5 Onglet Bilan
+
+- Bouton : `Reinitialiser tout`
+- Effet : reset global des données fonctionnelles des onglets (hors `DeviceType`)
+
+Toutes les actions sont protégées par une confirmation utilisateur.
+
+---
+
+## 11. Exécuter un script SQL à chaud (sans redémarrer SQL Server)
+
+Runner inclus : `database/scripts/run-sql-script.ps1`
+
+Exemple d'exécution :
+
+```powershell
+$env:SA_PASSWORD = "SolarDev!2026"
+.\database\scripts\run-sql-script.ps1 -SqlFile ".\database\scripts\truncate-usage-and-device-insert-3-tv.sql" -Database "solar"
+```
+
+Script de seed ciblé : `database/scripts/truncate-usage-and-device-insert-3-tv.sql`
+
+Ce script :
+- vide `EnergyConsumption`, `DeviceUsageSchedule`, `Device`
+- insère 3 TV : 23W, 20W, 10W
+- configure les créneaux :
+  - TV001 -> NUIT (2h)
+  - TV002 -> SOIR (2h)
+  - TV003 -> JOUR (1h)
+
+Résultat attendu :
+- JOUR = 10
+- SOIR = 40
+- NUIT = 46
