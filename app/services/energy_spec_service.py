@@ -48,6 +48,14 @@ class EnergySpecService:
         }
         rows_wh = [(name, by_slot_wh.get(str(name).strip().upper(), 0.0)) for name, _ in slot_rows]
 
+        # Dimensionnement convertisseur: 2x la consommation de la tranche.
+        converter_by_slot_w = {
+            slot_name: slot_value * 2.0
+            for slot_name, slot_value in by_slot_wh.items()
+        }
+        converter_total_w = sum(converter_by_slot_w.values())
+        energy_supplied_w = converter_total_w
+
         # Besoin pratique pour les panneaux:
         # consommation jour+soir + energie a stocker pour la nuit.
         practical_need_wh = day_wh + evening_wh + battery_wh
@@ -66,4 +74,7 @@ class EnergySpecService:
             "by_slot_wh": by_slot_wh,
             "rows": slot_rows,
             "rows_wh": rows_wh,
+            "converter_by_slot_w": converter_by_slot_w,
+            "converter_total_w": converter_total_w,
+            "energy_supplied_w": energy_supplied_w,
         }

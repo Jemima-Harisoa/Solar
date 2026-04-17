@@ -250,6 +250,8 @@ class SolarApp:
         self.night_need_var = tk.StringVar(value="0 W")
         self.charge_window_var = tk.StringVar(value="0 h")
         self.charge_energy_var = tk.StringVar(value="0 Wh")
+        self.converter_total_var = tk.StringVar(value="0 W")
+        self.energy_supplied_var = tk.StringVar(value="0 W")
 
         self._metric(cards, 0, "Depense totale", self.total_var)
         self._metric(cards, 1, "Panneaux requis", self.panel_var)
@@ -273,15 +275,22 @@ class SolarApp:
         ttk.Label(calc_detail, text="Puissance de recharge batterie (Wh)").grid(row=2, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.charge_energy_var, font=("Segoe UI", 10, "bold")).grid(row=2, column=3, sticky="w", pady=2)
 
+        ttk.Label(calc_detail, text="Convertisseur total (W)").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(calc_detail, textvariable=self.converter_total_var, font=("Segoe UI", 10, "bold")).grid(row=3, column=1, sticky="w", pady=2)
+        ttk.Label(calc_detail, text="Energie fournie totale (W)").grid(row=3, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(calc_detail, textvariable=self.energy_supplied_var, font=("Segoe UI", 10, "bold")).grid(row=3, column=3, sticky="w", pady=2)
+
         detail = ttk.LabelFrame(self.tab_balance, text="Besoin en energie par tranche", padding=10)
         detail.pack(fill="both", expand=True)
 
-        cols = ("slot", "wh")
+        cols = ("slot", "need", "converter")
         self.balance_tree = ttk.Treeview(detail, columns=cols, show="headings", height=8)
         self.balance_tree.heading("slot", text="Tranche")
-        self.balance_tree.heading("w", text="Besoin W")
+        self.balance_tree.heading("need", text="Besoin W")
+        self.balance_tree.heading("converter", text="Convertisseur W")
         self.balance_tree.column("slot", width=220, anchor="w")
-        self.balance_tree.column("wh", width=160, anchor="w")
+        self.balance_tree.column("need", width=160, anchor="w")
+        self.balance_tree.column("converter", width=180, anchor="w")
         self.balance_tree.pack(fill="both", expand=True)
 
     def _build_config_tab(self) -> None:
@@ -721,15 +730,27 @@ class SolarApp:
         self.charge_window_var.set(f"{spec['charge_window_hours']:.2f} h")
         charge_power_w = spec['battery_wh'] / spec['charge_window_hours'] if spec['charge_window_hours'] > 0 else 0.0
         self.charge_energy_var.set(f"{charge_power_w:.2f} Wh")
+        self.converter_total_var.set(f"{spec['converter_total_w']:.2f} W")
+        self.energy_supplied_var.set(f"{spec['energy_supplied_w']:.2f} W")
 
         by_slot = spec.get("by_slot", {})
+        converter_by_slot = spec.get("converter_by_slot_w", {})
         self.day_need_var.set(f"{float(by_slot.get('JOUR', 0.0)):.2f} W")
         self.evening_need_var.set(f"{float(by_slot.get('SOIR', 0.0)):.2f} W")
         self.night_need_var.set(f"{float(by_slot.get('NUIT', 0.0)):.2f} W")
 
         self.balance_tree.delete(*self.balance_tree.get_children())
         for name, wh in spec["rows_wh"]:
-            self.balance_tree.insert("", "end", values=(name, f"{float(wh):.2f}"))
+            slot_key = str(name).strip().upper()
+            self.balance_tree.insert(
+                "",
+                "end",
+                values=(
+                    name,
+                    f"{float(wh):.2f}",
+                    f"{float(converter_by_slot.get(slot_key, 0.0)):.2f}",
+                ),
+            )
 
         self.status_var.set("Bilan energetique genere")
 
