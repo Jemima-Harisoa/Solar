@@ -68,12 +68,12 @@ class SolarApp:
         self.notebook.add(self.tab_balance, text="Bilan")
         self.notebook.add(self.tab_config, text="Configurations")
 
+        self._build_config_tab()
         self._build_devices_tab()
         self._build_slots_tab()
         self._build_usage_tab()
         self._build_history_tab()
         self._build_balance_tab()
-        self._build_config_tab()
 
         ttk.Label(self.root, textvariable=self.status_var, anchor="w", padding=(12, 6)).pack(fill="x")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -241,7 +241,7 @@ class SolarApp:
         cards = ttk.LabelFrame(self.tab_balance, text="Sorties principales", padding=10)
         cards.pack(fill="x", pady=(0, 8))
 
-        self.total_var = tk.StringVar(value="0 Wh")
+        self.total_var = tk.StringVar(value="0 W")
         self.panel_var = tk.StringVar(value="0 W")
         self.battery_var = tk.StringVar(value="0 W")
         self.practical_need_var = tk.StringVar(value="0 W")
@@ -249,13 +249,17 @@ class SolarApp:
         self.evening_need_var = tk.StringVar(value="0 W")
         self.night_need_var = tk.StringVar(value="0 W")
         self.charge_window_var = tk.StringVar(value="0 h")
-        self.charge_energy_var = tk.StringVar(value="0 Wh")
+        self.charge_energy_var = tk.StringVar(value="0 W")
         self.converter_total_var = tk.StringVar(value="0 W")
         self.energy_supplied_var = tk.StringVar(value="0 W")
+        self.converter_factor_var = tk.StringVar(value="x2.00")
+        self.converter_peak_var = tk.StringVar(value="- (0.00 W)")
 
         self._metric(cards, 0, "Depense totale", self.total_var)
         self._metric(cards, 1, "Panneaux requis", self.panel_var)
         self._metric(cards, 2, "Puissance batterie", self.battery_var)
+        self._metric(cards, 3, "Convertisseur total", self.converter_total_var)
+        self._metric(cards, 4, "Energie fournie", self.energy_supplied_var)
 
         calc_detail = ttk.LabelFrame(self.tab_balance, text="Detail des calculs", padding=10)
         calc_detail.pack(fill="x", pady=(0, 8))
@@ -279,6 +283,11 @@ class SolarApp:
         ttk.Label(calc_detail, textvariable=self.converter_total_var, font=("Segoe UI", 10, "bold")).grid(row=3, column=1, sticky="w", pady=2)
         ttk.Label(calc_detail, text="Energie fournie totale (W)").grid(row=3, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.energy_supplied_var, font=("Segoe UI", 10, "bold")).grid(row=3, column=3, sticky="w", pady=2)
+
+        ttk.Label(calc_detail, text="Facteur convertisseur").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(calc_detail, textvariable=self.converter_factor_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=1, sticky="w", pady=2)
+        ttk.Label(calc_detail, text="Pic convertisseur (tranche)").grid(row=4, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(calc_detail, textvariable=self.converter_peak_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=3, sticky="w", pady=2)
 
         detail = ttk.LabelFrame(self.tab_balance, text="Besoin en energie par tranche", padding=10)
         detail.pack(fill="both", expand=True)
@@ -729,9 +738,13 @@ class SolarApp:
         self.battery_var.set(f"{spec['battery_wh']:.2f} W")
         self.charge_window_var.set(f"{spec['charge_window_hours']:.2f} h")
         charge_power_w = spec['battery_wh'] / spec['charge_window_hours'] if spec['charge_window_hours'] > 0 else 0.0
-        self.charge_energy_var.set(f"{charge_power_w:.2f} Wh")
+        self.charge_energy_var.set(f"{charge_power_w:.2f} W")
         self.converter_total_var.set(f"{spec['converter_total_w']:.2f} W")
         self.energy_supplied_var.set(f"{spec['energy_supplied_w']:.2f} W")
+        self.converter_factor_var.set(f"x{float(spec.get('converter_factor', 2.0)):.2f}")
+        self.converter_peak_var.set(
+            f"{spec.get('converter_peak_slot', '-') } ({float(spec.get('converter_peak_w', 0.0)):.2f} W)"
+        )
 
         by_slot = spec.get("by_slot", {})
         converter_by_slot = spec.get("converter_by_slot_w", {})
