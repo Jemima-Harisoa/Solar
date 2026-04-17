@@ -675,11 +675,20 @@ class SolarApp:
             raise ValueError("Ajoute au moins un creneau avant generation.")
 
         slot_rows = self.usage_crud.list_consumption_by_slot()
+        slot_hours_by_name = {
+            str(row[1]).strip().upper(): self._timeslot_duration_hours(int(row[2]), int(row[3]))
+            for row in self.timeslot_crud.list_timeslots()
+        }
         active_config = self.config_crud.get_active()
         if not active_config:
             raise ValueError("Aucune configuration active dans SystemConfiguration.")
 
-        spec = self.spec_service.build_spec(slot_rows, float(active_config[2]), float(active_config[3]))
+        spec = self.spec_service.build_spec(
+            slot_rows,
+            float(active_config[2]),
+            float(active_config[3]),
+            slot_hours_by_name=slot_hours_by_name,
+        )
 
         self.total_var.set(f"{spec['total_wh']:.2f} Wh")
         self.panel_var.set(f"{spec['panel_w']:.2f} W")
