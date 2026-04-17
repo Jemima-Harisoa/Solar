@@ -1,4 +1,5 @@
 from datetime import date
+import math
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -7,6 +8,7 @@ from app.crud.device_type import DeviceTypeCrud
 from app.crud.device_usage_schedule import DeviceUsageScheduleCrud
 from app.crud.energy_consumption import EnergyConsumptionCrud
 from app.crud.config import ConfigCrud
+from app.crud.panel_type import PanelTypeCrud
 from app.crud.timeslot import TimeSlotCrud
 from app.services.energy_spec_service import EnergySpecService
 from connection import ServerConnect
@@ -25,6 +27,7 @@ class SolarApp:
         self.usage_crud = DeviceUsageScheduleCrud(connector)
         self.history_crud = EnergyConsumptionCrud(connector)
         self.config_crud = ConfigCrud(connector)
+        self.panel_type_crud = PanelTypeCrud(connector)
         self.spec_service = EnergySpecService()
 
         self.device_map: dict[str, int] = {}
@@ -34,6 +37,7 @@ class SolarApp:
         self.slot_duration_map: dict[str, float] = {}
         self.config_map: dict[str, int] = {}
         self.selected_config_id: int | None = None
+        self.last_panel_need_w: float = 0.0
 
         self.status_var = tk.StringVar(value="Pret")
 
@@ -60,6 +64,7 @@ class SolarApp:
         self.tab_history = ttk.Frame(self.notebook, padding=10)
         self.tab_balance = ttk.Frame(self.notebook, padding=10)
         self.tab_config = ttk.Frame(self.notebook, padding=10)
+        self.tab_panels = ttk.Frame(self.notebook, padding=10)
 
         self.notebook.add(self.tab_devices, text="Materiels")
         self.notebook.add(self.tab_slots, text="Creneaux")
@@ -67,6 +72,7 @@ class SolarApp:
         self.notebook.add(self.tab_history, text="Historique")
         self.notebook.add(self.tab_balance, text="Bilan")
         self.notebook.add(self.tab_config, text="Configurations")
+        self.notebook.add(self.tab_panels, text="Types panneaux")
 
         self._build_config_tab()
         self._build_devices_tab()
@@ -74,6 +80,7 @@ class SolarApp:
         self._build_usage_tab()
         self._build_history_tab()
         self._build_balance_tab()
+        self._build_panel_types_tab()
 
         ttk.Label(self.root, textvariable=self.status_var, anchor="w", padding=(12, 6)).pack(fill="x")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -218,6 +225,51 @@ class SolarApp:
             self.history_tree.heading(col, text=title)
             self.history_tree.column(col, width=width, anchor="w")
         self.history_tree.pack(fill="both", expand=True)
+
+    def _build_panel_types_tab(self) -> None:
+        left = ttk.LabelFrame(self.tab_panels, text="Type de panneau solaire", padding=10)
+        left.pack(side="left", fill="y", padx=(0, 8))
+
+        right = ttk.LabelFrame(self.tab_panels, text="Types et dimensionnement", padding=10)
+        right.pack(side="left", fill="both", expand=True)
+
+        self.panel_type_name_var = tk.StringVar()
+        self.panel_type_pct_var = tk.StringVar()
+        self.panel_type_energy_var = tk.StringVar()
+        self.panel_type_price_var = tk.StringVar()
+        self.panel_type_desc_var = tk.StringVar()
+        self.panel_need_reference_var = tk.StringVar(value="0 W")
+
+        self._entry(left, "Nom du type", self.panel_type_name_var)
+        self._entry(left, "Capacite exploitable (%)", self.panel_type_pct_var)
+        self._entry(left, "Energie unitaire (W)", self.panel_type_energy_var)
+        self._entry(left, "Prix unitaire (Ar)", self.panel_type_price_var)
+        self._entry(left, "Description", self.panel_type_desc_var)
+
+        actions = ttk.Frame(left)
+        actions.pack(fill="x", pady=(8, 0))
+        ttk.Button(actions, text="Ajouter", command=lambda: self._safe(self.add_panel_type)).pack(side="left")
+        ttk.Button(actions, text="Rafraichir", command=lambda: self._safe(self.refresh_panel_types)).pack(side="left", padx=6)
+
+        ttk.Label(left, text="Besoin de reference (W)").pack(anchor="w", pady=(10, 0))
+        ttk.Label(left, textvariable=self.panel_need_reference_var, font=("Segoe UI", 10, "bold")).pack(anchor="w")
+
+        cols = ("id", "name", "pct", "energy", "usable", "price", "count", "cost", "desc")
+        self.panel_type_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
+        for col, title, width in [
+            ("id", "ID", 60),
+            ("name", "Type", 150),
+            ("pct", "Exploitable %", 110),
+            ("energy", "Energie unitaire W", 130),
+            ("usable", "Energie utile W", 130),
+            ("price", "Prix unitaire Ar", 130),
+            ("count", "Nb panneaux", 100),
+            ("cost", "Cout total Ar", 120),
+            ("desc", "Description", 260),
+        ]:
+            self.panel_type_tree.heading(col, text=title)
+            self.panel_type_tree.column(col, width=width, anchor="w")
+        self.panel_type_tree.pack(fill="both", expand=True)
 
     def _build_balance_tab(self) -> None:
         recap = ttk.LabelFrame(self.tab_balance, text="Recapitulatif avant calcul", padding=10)
@@ -427,6 +479,7 @@ class SolarApp:
         self.refresh_usage()
         self.refresh_history()
         self.refresh_configurations()
+        self.refresh_panel_types()
         self.refresh_recap()
         self._update_step_lock()
         self.status_var.set("Donnees chargees")
@@ -506,6 +559,66 @@ class SolarApp:
         self.history_tree.delete(*self.history_tree.get_children())
         for row in rows:
             self.history_tree.insert("", "end", values=row)
+
+    def refresh_panel_types(self) -> None:
+        rows = self.panel_type_crud.list_panel_types()
+        self.panel_type_tree.delete(*self.panel_type_tree.get_children())
+        self.panel_need_reference_var.set(f"{self.last_panel_need_w:.2f} W")
+
+        for row in rows:
+            panel_type_id = row[0]
+            type_name = row[1]
+            exploitable_pct = float(row[2])
+            unit_energy_w = float(row[3])
+            unit_price_ar = float(row[4])
+            usable_energy_w = float(row[5])
+            description = row[6] or ""
+
+            panel_count = math.ceil(self.last_panel_need_w / usable_energy_w) if usable_energy_w > 0 and self.last_panel_need_w > 0 else 0
+            total_cost_ar = panel_count * unit_price_ar
+
+            self.panel_type_tree.insert(
+                "",
+                "end",
+                values=(
+                    panel_type_id,
+                    type_name,
+                    f"{exploitable_pct:.2f}",
+                    f"{unit_energy_w:.2f}",
+                    f"{usable_energy_w:.2f}",
+                    f"{unit_price_ar:.2f}",
+                    str(panel_count),
+                    f"{total_cost_ar:.2f}",
+                    description,
+                ),
+            )
+
+    def add_panel_type(self) -> None:
+        type_name = self.panel_type_name_var.get().strip()
+        exploitable_pct = float(self.panel_type_pct_var.get())
+        unit_energy_w = float(self.panel_type_energy_var.get())
+        unit_price_ar = float(self.panel_type_price_var.get())
+        description = self.panel_type_desc_var.get().strip() or None
+
+        if not type_name:
+            raise ValueError("Le nom du type de panneau est obligatoire.")
+        if exploitable_pct <= 0 or exploitable_pct > 100:
+            raise ValueError("La capacite exploitable doit etre comprise entre 0 et 100.")
+        if unit_energy_w <= 0:
+            raise ValueError("L'energie unitaire doit etre superieure a 0.")
+        if unit_price_ar < 0:
+            raise ValueError("Le prix unitaire doit etre superieur ou egal a 0.")
+
+        self.panel_type_crud.create_panel_type(
+            type_name=type_name,
+            exploitable_pct=exploitable_pct,
+            unit_energy_w=unit_energy_w,
+            unit_price_ar=unit_price_ar,
+            description=description,
+        )
+
+        self.refresh_panel_types()
+        self.status_var.set("Type de panneau ajoute")
 
     def refresh_configurations(self) -> None:
         rows = self.config_crud.get_all()
@@ -742,6 +855,7 @@ class SolarApp:
         self.total_var.set(f"{spec['total_wh']:.2f} W")
         self.practical_need_var.set(f"{spec['practical_need_wh']:.2f} W")
         self.panel_var.set(f"{spec['panel_w']:.2f} W")
+        self.last_panel_need_w = float(spec['panel_w'])
         self.battery_var.set(f"{spec['battery_wh']:.2f} W")
         self.charge_window_var.set(f"{spec['charge_window_hours']:.2f} h")
         charge_power_w = spec['battery_wh'] / spec['charge_window_hours'] if spec['charge_window_hours'] > 0 else 0.0
@@ -773,6 +887,8 @@ class SolarApp:
                     f"{float(converter_by_slot.get(slot_key, 0.0)):.2f}",
                 ),
             )
+
+        self.refresh_panel_types()
 
         self.status_var.set("Bilan energetique genere")
 
