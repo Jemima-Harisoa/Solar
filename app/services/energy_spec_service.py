@@ -1,6 +1,11 @@
 class EnergySpecService:
     @staticmethod
-    def build_spec(slot_rows: list[tuple], efficiency_pct: float, battery_overcapacity_pct: float) -> dict:
+    def build_spec(
+        slot_rows: list[tuple],
+        efficiency_pct: float,
+        battery_overcapacity_pct: float,
+        slot_hours_by_name: dict[str, float] | None = None,
+    ) -> dict:
         by_slot = {str(name).strip().upper(): float(wh) for name, wh in slot_rows}
 
         # Tranches metier fixes:
@@ -16,8 +21,15 @@ class EnergySpecService:
         # La batterie est dimensionnee pour couvrir toute la nuit (+ marge de securite).
         battery_wh = night_wh * (1.0 + battery_overcapacity_pct / 100.0)
 
-        # La recharge batterie se fait uniquement sur la fenetre de production 6h-19h (13h).
-        charge_window_hours = 13.0
+        # Recharge dynamique sur les creneaux de production (JOUR + SOIR).
+        # Si les durees ne sont pas disponibles, fallback sur la fenetre standard 6h-19h.
+        normalized_hours = {
+            str(name).strip().upper(): float(hours)
+            for name, hours in (slot_hours_by_name or {}).items()
+        }
+        charge_window_hours = normalized_hours.get("JOUR", 0.0) + normalized_hours.get("SOIR", 0.0)
+        if charge_window_hours <= 0:
+            charge_window_hours = 13.0
         battery_charge_power_w = 0.0 if charge_window_hours <= 0 else battery_wh / charge_window_hours
 
         # Besoin pratique pour les panneaux:
