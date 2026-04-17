@@ -100,7 +100,7 @@ class SolarApp:
         self.device_type_combo.bind("<<ComboboxSelected>>", lambda _event: self._update_selected_type_role())
         ttk.Label(left, text="Role energetique").pack(anchor="w", pady=(4, 0))
         ttk.Label(left, textvariable=self.device_role_var, font=("Segoe UI", 10, "bold")).pack(anchor="w")
-        self._entry(left, "Puissance (W)", self.device_power_var)
+        self._entry(left, "Puissance (Wh)", self.device_power_var)
         self._entry(left, "Date installation (YYYY-MM-DD)", self.device_date_var)
         self._combo(left, "Statut", self.device_status_var, ["ACTIF", "INACTIF", "MAINTEN"])
         self._entry(left, "Description", self.device_desc_var)
@@ -249,7 +249,7 @@ class SolarApp:
         self.evening_need_var = tk.StringVar(value="0 W")
         self.night_need_var = tk.StringVar(value="0 W")
         self.charge_window_var = tk.StringVar(value="0 h")
-        self.charge_energy_var = tk.StringVar(value="0 W")
+        self.charge_energy_var = tk.StringVar(value="0 Wh")
 
         self._metric(cards, 0, "Depense totale", self.total_var)
         self._metric(cards, 1, "Panneaux requis", self.panel_var)
@@ -270,7 +270,7 @@ class SolarApp:
 
         ttk.Label(calc_detail, text="Fenetre de recharge batterie").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.charge_window_var, font=("Segoe UI", 10, "bold")).grid(row=2, column=1, sticky="w", pady=2)
-        ttk.Label(calc_detail, text="Puissance de recharge batterie (W)").grid(row=2, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(calc_detail, text="Puissance de recharge batterie (Wh)").grid(row=2, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.charge_energy_var, font=("Segoe UI", 10, "bold")).grid(row=2, column=3, sticky="w", pady=2)
 
         detail = ttk.LabelFrame(self.tab_balance, text="Besoin en energie par tranche", padding=10)
@@ -279,7 +279,7 @@ class SolarApp:
         cols = ("slot", "wh")
         self.balance_tree = ttk.Treeview(detail, columns=cols, show="headings", height=8)
         self.balance_tree.heading("slot", text="Tranche")
-        self.balance_tree.heading("wh", text="Besoin Wh")
+        self.balance_tree.heading("w", text="Besoin W")
         self.balance_tree.column("slot", width=220, anchor="w")
         self.balance_tree.column("wh", width=160, anchor="w")
         self.balance_tree.pack(fill="both", expand=True)
@@ -714,13 +714,13 @@ class SolarApp:
             slot_hours_by_name=slot_hours_by_name,
         )
 
-        self.total_var.set(f"{spec['total_wh']:.2f} Wh")
+        self.total_var.set(f"{spec['total_wh']:.2f} W")
         self.practical_need_var.set(f"{spec['practical_need_wh']:.2f} W")
         self.panel_var.set(f"{spec['panel_w']:.2f} W")
         self.battery_var.set(f"{spec['battery_wh']:.2f} W")
         self.charge_window_var.set(f"{spec['charge_window_hours']:.2f} h")
         charge_power_w = spec['battery_wh'] / spec['charge_window_hours'] if spec['charge_window_hours'] > 0 else 0.0
-        self.charge_energy_var.set(f"{charge_power_w:.2f} W")
+        self.charge_energy_var.set(f"{charge_power_w:.2f} Wh")
 
         by_slot = spec.get("by_slot", {})
         self.day_need_var.set(f"{float(by_slot.get('JOUR', 0.0)):.2f} W")
