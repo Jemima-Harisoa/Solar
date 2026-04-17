@@ -13,3 +13,11 @@ class EnergyConsumptionCrud(BaseCrud):
             ORDER BY ec.ConsumptionDate DESC, ec.ConsumptionId DESC
             """
         )
+
+    def truncate_history(self) -> None:
+        self.execute(
+            """
+            DELETE FROM EnergyConsumption;
+            DBCC CHECKIDENT ('EnergyConsumption', RESEED, 0);
+            """
+        )
