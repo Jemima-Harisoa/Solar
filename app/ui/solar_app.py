@@ -243,17 +243,17 @@ class SolarApp:
 
         self.total_var = tk.StringVar(value="0 Wh")
         self.panel_var = tk.StringVar(value="0 W")
-        self.battery_var = tk.StringVar(value="0 Wh")
-        self.practical_need_var = tk.StringVar(value="0 Wh")
-        self.day_need_var = tk.StringVar(value="0 Wh")
-        self.evening_need_var = tk.StringVar(value="0 Wh")
-        self.night_need_var = tk.StringVar(value="0 Wh")
+        self.battery_var = tk.StringVar(value="0 W")
+        self.practical_need_var = tk.StringVar(value="0 W")
+        self.day_need_var = tk.StringVar(value="0 W")
+        self.evening_need_var = tk.StringVar(value="0 W")
+        self.night_need_var = tk.StringVar(value="0 W")
         self.charge_window_var = tk.StringVar(value="0 h")
-        self.charge_energy_var = tk.StringVar(value="0 Wh")
+        self.charge_energy_var = tk.StringVar(value="0 W")
 
         self._metric(cards, 0, "Depense totale", self.total_var)
         self._metric(cards, 1, "Panneaux requis", self.panel_var)
-        self._metric(cards, 2, "Energie batterie", self.battery_var)
+        self._metric(cards, 2, "Puissance batterie", self.battery_var)
 
         calc_detail = ttk.LabelFrame(self.tab_balance, text="Detail des calculs", padding=10)
         calc_detail.pack(fill="x", pady=(0, 8))
@@ -265,12 +265,12 @@ class SolarApp:
 
         ttk.Label(calc_detail, text="Consommation NUIT").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.night_need_var, font=("Segoe UI", 10, "bold")).grid(row=1, column=1, sticky="w", pady=2)
-        ttk.Label(calc_detail, text="Besoin pratique a fournir (Wh)").grid(row=1, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(calc_detail, text="Besoin pratique a fournir (W)").grid(row=1, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.practical_need_var, font=("Segoe UI", 10, "bold")).grid(row=1, column=3, sticky="w", pady=2)
 
         ttk.Label(calc_detail, text="Fenetre de recharge batterie").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.charge_window_var, font=("Segoe UI", 10, "bold")).grid(row=2, column=1, sticky="w", pady=2)
-        ttk.Label(calc_detail, text="Energie de recharge batterie (Wh)").grid(row=2, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(calc_detail, text="Puissance de recharge batterie (W)").grid(row=2, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.charge_energy_var, font=("Segoe UI", 10, "bold")).grid(row=2, column=3, sticky="w", pady=2)
 
         detail = ttk.LabelFrame(self.tab_balance, text="Besoin en energie par tranche", padding=10)
@@ -715,16 +715,17 @@ class SolarApp:
         )
 
         self.total_var.set(f"{spec['total_wh']:.2f} Wh")
-        self.practical_need_var.set(f"{spec['practical_need_wh']:.2f} Wh")
+        self.practical_need_var.set(f"{spec['practical_need_wh']:.2f} W")
         self.panel_var.set(f"{spec['panel_w']:.2f} W")
-        self.battery_var.set(f"{spec['battery_wh']:.2f} Wh")
+        self.battery_var.set(f"{spec['battery_wh']:.2f} W")
         self.charge_window_var.set(f"{spec['charge_window_hours']:.2f} h")
-        self.charge_energy_var.set(f"{spec['battery_charge_wh']:.2f} Wh")
+        charge_power_w = spec['battery_wh'] / spec['charge_window_hours'] if spec['charge_window_hours'] > 0 else 0.0
+        self.charge_energy_var.set(f"{charge_power_w:.2f} W")
 
         by_slot = spec.get("by_slot", {})
-        self.day_need_var.set(f"{float(by_slot.get('JOUR', 0.0)):.2f} Wh")
-        self.evening_need_var.set(f"{float(by_slot.get('SOIR', 0.0)):.2f} Wh")
-        self.night_need_var.set(f"{float(by_slot.get('NUIT', 0.0)):.2f} Wh")
+        self.day_need_var.set(f"{float(by_slot.get('JOUR', 0.0)):.2f} W")
+        self.evening_need_var.set(f"{float(by_slot.get('SOIR', 0.0)):.2f} W")
+        self.night_need_var.set(f"{float(by_slot.get('NUIT', 0.0)):.2f} W")
 
         self.balance_tree.delete(*self.balance_tree.get_children())
         for name, wh in spec["rows_wh"]:
