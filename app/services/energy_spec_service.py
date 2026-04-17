@@ -40,45 +40,30 @@ class EnergySpecService:
         charge_window_hours = normalized_hours.get("JOUR", 0.0) + normalized_hours.get("SOIR", 0.0)
         if charge_window_hours <= 0:
             charge_window_hours = 13.0
-        battery_charge_power_w = 0.0 if charge_window_hours <= 0 else battery_wh / charge_window_hours
-        battery_charge_energy_wh = battery_charge_power_w * charge_window_hours
-
-        day_w = 0.0 if day_hours <= 0 else day_wh / day_hours
-        evening_w = 0.0 if evening_hours <= 0 else evening_wh / evening_hours
-        night_w = 0.0 if night_hours <= 0 else night_wh / night_hours
-
-        total_hours = day_hours + evening_hours + night_hours
-        total_w = 0.0 if total_hours <= 0 else total_wh / total_hours
-        battery_supply_w = 0.0 if night_hours <= 0 else battery_wh / night_hours
-
-        by_slot_w = {
-            "JOUR": day_w,
-            "SOIR": evening_w,
-            "NUIT": night_w,
+        battery_charge_wh = battery_wh
+        by_slot_wh = {
+            "JOUR": day_wh,
+            "SOIR": evening_wh,
+            "NUIT": night_wh,
         }
-        rows_w = [(name, by_slot_w.get(str(name).strip().upper(), 0.0)) for name, _ in slot_rows]
+        rows_wh = [(name, by_slot_wh.get(str(name).strip().upper(), 0.0)) for name, _ in slot_rows]
 
         # Besoin pratique pour les panneaux:
         # consommation jour+soir + energie a stocker pour la nuit.
         practical_need_wh = day_wh + evening_wh + battery_wh
-        practical_need_w = 0.0 if charge_window_hours <= 0 else practical_need_wh / charge_window_hours
 
         # Rendement panneaux applique sur le besoin pratique.
         panel_w = 0.0 if efficiency_pct <= 0 else practical_need_wh * 100.0 / efficiency_pct
 
         return {
             "total_wh": total_wh,
-            "total_w": total_w,
             "practical_need_wh": practical_need_wh,
-            "practical_need_w": practical_need_w,
             "panel_w": panel_w,
             "battery_wh": battery_wh,
-            "battery_supply_w": battery_supply_w,
-            "battery_charge_power_w": battery_charge_power_w,
-            "battery_charge_energy_wh": battery_charge_energy_wh,
+            "battery_charge_wh": battery_charge_wh,
             "charge_window_hours": charge_window_hours,
             "by_slot": by_slot,
-            "by_slot_w": by_slot_w,
+            "by_slot_wh": by_slot_wh,
             "rows": slot_rows,
-            "rows_w": rows_w,
+            "rows_wh": rows_wh,
         }
