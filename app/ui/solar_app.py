@@ -6,7 +6,7 @@ from app.crud.device import DeviceCrud
 from app.crud.device_type import DeviceTypeCrud
 from app.crud.device_usage_schedule import DeviceUsageScheduleCrud
 from app.crud.energy_consumption import EnergyConsumptionCrud
-from app.crud.system_configuration import SystemConfigurationCrud
+from app.crud.config import ConfigCrud
 from app.crud.timeslot import TimeSlotCrud
 from app.services.energy_spec_service import EnergySpecService
 from connection import ServerConnect
@@ -24,7 +24,7 @@ class SolarApp:
         self.timeslot_crud = TimeSlotCrud(connector)
         self.usage_crud = DeviceUsageScheduleCrud(connector)
         self.history_crud = EnergyConsumptionCrud(connector)
-        self.system_config_crud = SystemConfigurationCrud(connector)
+        self.config_crud = ConfigCrud(connector)
         self.spec_service = EnergySpecService()
 
         self.device_map: dict[str, int] = {}
@@ -32,6 +32,8 @@ class SolarApp:
         self.device_type_map: dict[str, int] = {}
         self.device_type_role_map: dict[str, str] = {}
         self.slot_duration_map: dict[str, float] = {}
+        self.config_map: dict[str, int] = {}
+        self.selected_config_id: int | None = None
 
         self.status_var = tk.StringVar(value="Pret")
 
@@ -57,18 +59,21 @@ class SolarApp:
         self.tab_usage = ttk.Frame(self.notebook, padding=10)
         self.tab_history = ttk.Frame(self.notebook, padding=10)
         self.tab_balance = ttk.Frame(self.notebook, padding=10)
+        self.tab_config = ttk.Frame(self.notebook, padding=10)
 
         self.notebook.add(self.tab_devices, text="Materiels")
         self.notebook.add(self.tab_slots, text="Creneaux")
         self.notebook.add(self.tab_usage, text="Usage")
         self.notebook.add(self.tab_history, text="Historique")
         self.notebook.add(self.tab_balance, text="Bilan")
+        self.notebook.add(self.tab_config, text="Configurations")
 
         self._build_devices_tab()
         self._build_slots_tab()
         self._build_usage_tab()
         self._build_history_tab()
         self._build_balance_tab()
+        self._build_config_tab()
 
         ttk.Label(self.root, textvariable=self.status_var, anchor="w", padding=(12, 6)).pack(fill="x")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -255,6 +260,53 @@ class SolarApp:
         self.balance_tree.column("wh", width=160, anchor="w")
         self.balance_tree.pack(fill="both", expand=True)
 
+    def _build_config_tab(self) -> None:
+        left = ttk.LabelFrame(self.tab_config, text="Gestion des configurations", padding=10)
+        left.pack(side="left", fill="y", padx=(0, 8))
+
+        right = ttk.LabelFrame(self.tab_config, text="Liste des configurations", padding=10)
+        right.pack(side="left", fill="both", expand=True)
+
+        self.config_grid_voltage_var = tk.StringVar()
+        self.config_efficiency_var = tk.StringVar()
+        self.config_battery_var = tk.StringVar()
+        self.config_desc_var = tk.StringVar()
+        self.config_active_var = tk.BooleanVar(value=False)
+
+        self._entry(left, "Tension secteur (V)", self.config_grid_voltage_var)
+        self._entry(left, "Rendement panneaux (%)", self.config_efficiency_var)
+        self._entry(left, "Marge batterie (%)", self.config_battery_var)
+        self._entry(left, "Description", self.config_desc_var)
+        ttk.Checkbutton(left, text="Activer cette configuration", variable=self.config_active_var).pack(anchor="w", pady=(4, 8))
+
+        actions = ttk.Frame(left)
+        actions.pack(fill="x", pady=(8, 0))
+        ttk.Button(actions, text="Ajouter", command=lambda: self._safe(self.add_configuration)).grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=2)
+        ttk.Button(actions, text="Mettre a jour", command=lambda: self._safe(self.update_configuration)).grid(row=0, column=1, sticky="ew", padx=(0, 6), pady=2)
+        ttk.Button(actions, text="Supprimer", command=lambda: self._safe(self.delete_configuration)).grid(row=1, column=0, sticky="ew", padx=(0, 6), pady=2)
+        ttk.Button(actions, text="Activer", command=lambda: self._safe(self.set_active_configuration)).grid(row=1, column=1, sticky="ew", padx=(0, 6), pady=2)
+        ttk.Button(actions, text="Reinitialiser", command=lambda: self._safe(self.truncate_configurations)).grid(row=2, column=0, sticky="ew", padx=(0, 6), pady=2)
+        ttk.Button(actions, text="Rafraichir", command=lambda: self._safe(self.refresh_configurations)).grid(row=2, column=1, sticky="ew", padx=(0, 6), pady=2)
+        actions.grid_columnconfigure(0, weight=1)
+        actions.grid_columnconfigure(1, weight=1)
+
+        cols = ("id", "voltage", "efficiency", "battery", "active", "created", "updated", "desc")
+        self.config_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
+        for col, title, width in [
+            ("id", "ID", 60),
+            ("voltage", "Voltage V", 90),
+            ("efficiency", "Rendement %", 100),
+            ("battery", "Batterie %", 100),
+            ("active", "Active", 80),
+            ("created", "Creee le", 150),
+            ("updated", "Modifiee le", 150),
+            ("desc", "Description", 280),
+        ]:
+            self.config_tree.heading(col, text=title)
+            self.config_tree.column(col, width=width, anchor="w")
+        self.config_tree.pack(fill="both", expand=True)
+        self.config_tree.bind("<<TreeviewSelect>>", lambda _event: self._on_config_select())
+
     def _entry(self, parent: ttk.Frame, label: str, var: tk.StringVar) -> ttk.Entry:
         ttk.Label(parent, text=label).pack(anchor="w", pady=(4, 0))
         entry = ttk.Entry(parent, textvariable=var, width=36)
@@ -280,6 +332,28 @@ class SolarApp:
         ttk.Label(box, text=title).pack(anchor="w")
         ttk.Label(box, textvariable=value_var, font=("Segoe UI", 14, "bold")).pack(anchor="w")
 
+    def _on_config_select(self) -> None:
+        selection = self.config_tree.selection()
+        if not selection:
+            return
+        values = self.config_tree.item(selection[0], "values")
+        if not values:
+            return
+        self.selected_config_id = int(values[0])
+        self.config_grid_voltage_var.set(str(values[1]))
+        self.config_efficiency_var.set(str(values[2]))
+        self.config_battery_var.set(str(values[3]))
+        self.config_active_var.set(str(values[4]).strip().upper() in {"1", "TRUE", "YES", "OUI"})
+        self.config_desc_var.set(values[7] if len(values) > 7 and values[7] is not None else "")
+
+    def _clear_config_form(self) -> None:
+        self.selected_config_id = None
+        self.config_grid_voltage_var.set("")
+        self.config_efficiency_var.set("")
+        self.config_battery_var.set("")
+        self.config_desc_var.set("")
+        self.config_active_var.set(False)
+
     @staticmethod
     def _timeslot_duration_hours(start_hour: int, end_hour: int) -> float:
         if end_hour > start_hour:
@@ -303,6 +377,7 @@ class SolarApp:
         self.refresh_slots()
         self.refresh_usage()
         self.refresh_history()
+        self.refresh_configurations()
         self.refresh_recap()
         self._update_step_lock()
         self.status_var.set("Donnees chargees")
@@ -383,10 +458,137 @@ class SolarApp:
         for row in rows:
             self.history_tree.insert("", "end", values=row)
 
+    def refresh_configurations(self) -> None:
+        rows = self.config_crud.get_all()
+        self.config_tree.delete(*self.config_tree.get_children())
+        active_item = None
+
+        for row in rows:
+            active_text = "Oui" if row[5] else "Non"
+            created_at = row[6].strftime("%Y-%m-%d %H:%M") if row[6] else ""
+            updated_at = row[7].strftime("%Y-%m-%d %H:%M") if row[7] else ""
+            item_id = self.config_tree.insert(
+                "",
+                "end",
+                values=(row[0], f"{float(row[1]):.2f}", f"{float(row[2]):.2f}", f"{float(row[3]):.2f}", active_text, created_at, updated_at, row[4] or ""),
+            )
+            if row[5]:
+                active_item = item_id
+
+        if active_item is not None:
+            self.config_tree.selection_set(active_item)
+            self.config_tree.focus(active_item)
+            self._on_config_select()
+        elif rows:
+            first_item = self.config_tree.get_children()[0]
+            self.config_tree.selection_set(first_item)
+            self.config_tree.focus(first_item)
+            self._on_config_select()
+        else:
+            self._clear_config_form()
+
     def refresh_recap(self) -> None:
         self.recap_device_var.set(str(self.device_crud.count_devices()))
         self.recap_slot_var.set(str(self.timeslot_crud.count_timeslots()))
         self.recap_hours_var.set(f"{self.usage_crud.sum_enabled_usage_hours():.2f}")
+
+    def add_configuration(self) -> None:
+        grid_voltage = float(self.config_grid_voltage_var.get())
+        solar_efficiency = float(self.config_efficiency_var.get())
+        battery_overcapacity = float(self.config_battery_var.get())
+        description = self.config_desc_var.get().strip() or None
+
+        if grid_voltage <= 0:
+            raise ValueError("La tension secteur doit etre superieure a 0.")
+        if solar_efficiency <= 0 or solar_efficiency > 100:
+            raise ValueError("Le rendement panneaux doit etre compris entre 0 et 100.")
+        if battery_overcapacity <= 0:
+            raise ValueError("La marge batterie doit etre superieure a 0.")
+
+        config_id = self.config_crud.create(
+            grid_voltage=grid_voltage,
+            solar_efficiency=solar_efficiency,
+            battery_overcapacity=battery_overcapacity,
+            description=description,
+            is_active=False,
+        )
+
+        if self.config_active_var.get():
+            self.config_crud.set_active(config_id)
+
+        self.refresh_configurations()
+        self.status_var.set("Configuration ajoutee")
+
+    def update_configuration(self) -> None:
+        if self.selected_config_id is None:
+            raise ValueError("Selectionne une configuration dans la liste.")
+
+        grid_voltage = float(self.config_grid_voltage_var.get())
+        solar_efficiency = float(self.config_efficiency_var.get())
+        battery_overcapacity = float(self.config_battery_var.get())
+        description = self.config_desc_var.get().strip() or None
+
+        if grid_voltage <= 0:
+            raise ValueError("La tension secteur doit etre superieure a 0.")
+        if solar_efficiency <= 0 or solar_efficiency > 100:
+            raise ValueError("Le rendement panneaux doit etre compris entre 0 et 100.")
+        if battery_overcapacity <= 0:
+            raise ValueError("La marge batterie doit etre superieure a 0.")
+
+        self.config_crud.update(
+            self.selected_config_id,
+            grid_voltage=grid_voltage,
+            solar_efficiency=solar_efficiency,
+            battery_overcapacity=battery_overcapacity,
+            description=description,
+        )
+
+        if self.config_active_var.get():
+            self.config_crud.set_active(self.selected_config_id)
+        else:
+            self.config_crud.update(self.selected_config_id, is_active=False)
+
+        self.refresh_configurations()
+        self.status_var.set("Configuration mise a jour")
+
+    def delete_configuration(self) -> None:
+        if self.selected_config_id is None:
+            raise ValueError("Selectionne une configuration dans la liste.")
+
+        config = self.config_crud.get_by_id(self.selected_config_id)
+        if config is None:
+            raise ValueError("Configuration introuvable.")
+
+        if not messagebox.askyesno("Confirmation", "Supprimer cette configuration ?"):
+            return
+
+        was_active = bool(config[5])
+        self.config_crud.delete(self.selected_config_id)
+        self.refresh_configurations()
+
+        if was_active:
+            remaining = self.config_crud.get_all()
+            if remaining:
+                self.config_crud.set_active(int(remaining[0][0]))
+                self.refresh_configurations()
+
+        self.status_var.set("Configuration supprimee")
+
+    def set_active_configuration(self) -> None:
+        if self.selected_config_id is None:
+            raise ValueError("Selectionne une configuration dans la liste.")
+
+        self.config_crud.set_active(self.selected_config_id)
+        self.refresh_configurations()
+        self.status_var.set("Configuration activee")
+
+    def truncate_configurations(self) -> None:
+        if not messagebox.askyesno("Confirmation", "Vider toutes les configurations ?"):
+            return
+
+        self.config_crud.truncate()
+        self.refresh_configurations()
+        self.status_var.set("Table des configurations reinitialisee")
 
     def add_device(self) -> None:
         code = self.device_code_var.get().strip()
@@ -473,11 +675,11 @@ class SolarApp:
             raise ValueError("Ajoute au moins un creneau avant generation.")
 
         slot_rows = self.usage_crud.list_consumption_by_slot()
-        active_config = self.system_config_crud.get_active_config()
+        active_config = self.config_crud.get_active()
         if not active_config:
             raise ValueError("Aucune configuration active dans SystemConfiguration.")
 
-        spec = self.spec_service.build_spec(slot_rows, active_config[0], active_config[1])
+        spec = self.spec_service.build_spec(slot_rows, float(active_config[2]), float(active_config[3]))
 
         self.total_var.set(f"{spec['total_wh']:.2f} Wh")
         self.panel_var.set(f"{spec['panel_w']:.2f} W")
