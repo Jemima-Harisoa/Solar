@@ -1,5 +1,4 @@
 from datetime import date
-import math
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -38,6 +37,11 @@ class SolarApp:
         self.config_map: dict[str, int] = {}
         self.selected_config_id: int | None = None
         self.last_panel_need_w: float = 0.0
+        self.panel_options: list[dict] = []
+        self.panel_best_option: dict | None = None
+        self.panel_need_reference_var = tk.StringVar(value="0 W")
+        self.panel_recommendation_var = tk.StringVar(value="Aucune recommandation")
+        self.panel_ratio_var = tk.StringVar(value="0.00 Ar/W")
 
         self.status_var = tk.StringVar(value="Pret")
 
@@ -238,7 +242,6 @@ class SolarApp:
         self.panel_type_energy_var = tk.StringVar()
         self.panel_type_price_var = tk.StringVar()
         self.panel_type_desc_var = tk.StringVar()
-        self.panel_need_reference_var = tk.StringVar(value="0 W")
 
         self._entry(left, "Nom du type", self.panel_type_name_var)
         self._entry(left, "Capacite exploitable (%)", self.panel_type_pct_var)
@@ -253,8 +256,12 @@ class SolarApp:
 
         ttk.Label(left, text="Besoin de reference (W)").pack(anchor="w", pady=(10, 0))
         ttk.Label(left, textvariable=self.panel_need_reference_var, font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        ttk.Label(left, text="Meilleure option").pack(anchor="w", pady=(10, 0))
+        ttk.Label(left, textvariable=self.panel_recommendation_var, font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        ttk.Label(left, text="Ratio prix / energie").pack(anchor="w", pady=(10, 0))
+        ttk.Label(left, textvariable=self.panel_ratio_var, font=("Segoe UI", 10, "bold")).pack(anchor="w")
 
-        cols = ("id", "name", "pct", "energy", "usable", "price", "count", "cost", "desc")
+        cols = ("id", "name", "pct", "energy", "usable", "price", "count", "cost", "ratio", "best", "desc")
         self.panel_type_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
         for col, title, width in [
             ("id", "ID", 60),
@@ -265,7 +272,9 @@ class SolarApp:
             ("price", "Prix unitaire Ar", 130),
             ("count", "Nb panneaux", 100),
             ("cost", "Cout total Ar", 120),
-            ("desc", "Description", 260),
+            ("ratio", "Ratio Ar/W", 100),
+            ("best", "Best", 70),
+            ("desc", "Description", 240),
         ]:
             self.panel_type_tree.heading(col, text=title)
             self.panel_type_tree.column(col, width=width, anchor="w")
@@ -296,7 +305,6 @@ class SolarApp:
         self.total_var = tk.StringVar(value="0 W")
         self.panel_var = tk.StringVar(value="0 W")
         self.battery_var = tk.StringVar(value="0 W")
-        self.practical_need_var = tk.StringVar(value="0 W")
         self.day_need_var = tk.StringVar(value="0 W")
         self.evening_need_var = tk.StringVar(value="0 W")
         self.evening_solar_var = tk.StringVar(value="0 W")
@@ -304,16 +312,15 @@ class SolarApp:
         self.night_need_var = tk.StringVar(value="0 W")
         self.charge_window_var = tk.StringVar(value="0 h")
         self.charge_energy_var = tk.StringVar(value="0 W")
-        self.converter_total_var = tk.StringVar(value="0 W")
-        self.energy_supplied_var = tk.StringVar(value="0 W")
-        self.converter_factor_var = tk.StringVar(value="x2.00")
-        self.converter_peak_var = tk.StringVar(value="- (0.00 W)")
+        self.panel_best_cost_var = tk.StringVar(value="0 Ar")
+        self.panel_best_count_var = tk.StringVar(value="0")
+        self.panel_best_energy_var = tk.StringVar(value="0 W")
 
         self._metric(cards, 0, "Depense totale", self.total_var)
         self._metric(cards, 1, "Panneaux requis", self.panel_var)
         self._metric(cards, 2, "Puissance batterie", self.battery_var)
-        self._metric(cards, 3, "Convertisseur total", self.converter_total_var)
-        self._metric(cards, 4, "Energie fournie", self.energy_supplied_var)
+        self._metric(cards, 3, "Cout option retenue", self.panel_best_cost_var)
+        self._metric(cards, 4, "Energie retenue", self.panel_best_energy_var)
 
         calc_detail = ttk.LabelFrame(self.tab_balance, text="Detail des calculs", padding=10)
         calc_detail.pack(fill="x", pady=(0, 8))
@@ -330,35 +337,28 @@ class SolarApp:
 
         ttk.Label(calc_detail, text="Consommation NUIT").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.night_need_var, font=("Segoe UI", 10, "bold")).grid(row=2, column=1, sticky="w", pady=2)
-        ttk.Label(calc_detail, text="Besoin pratique a fournir (W)").grid(row=2, column=2, sticky="w", padx=(20, 8), pady=2)
-        ttk.Label(calc_detail, textvariable=self.practical_need_var, font=("Segoe UI", 10, "bold")).grid(row=2, column=3, sticky="w", pady=2)
+        ttk.Label(calc_detail, text="Besoin panneau a couvrir (W)").grid(row=2, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(calc_detail, textvariable=self.panel_need_reference_var, font=("Segoe UI", 10, "bold")).grid(row=2, column=3, sticky="w", pady=2)
 
         ttk.Label(calc_detail, text="Fenetre de recharge batterie").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.charge_window_var, font=("Segoe UI", 10, "bold")).grid(row=3, column=1, sticky="w", pady=2)
         ttk.Label(calc_detail, text="Puissance de recharge batterie (Wh)").grid(row=3, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.charge_energy_var, font=("Segoe UI", 10, "bold")).grid(row=3, column=3, sticky="w", pady=2)
 
-        ttk.Label(calc_detail, text="Convertisseur total (W)").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=2)
-        ttk.Label(calc_detail, textvariable=self.converter_total_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=1, sticky="w", pady=2)
-        ttk.Label(calc_detail, text="Energie fournie totale (W)").grid(row=4, column=2, sticky="w", padx=(20, 8), pady=2)
-        ttk.Label(calc_detail, textvariable=self.energy_supplied_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=3, sticky="w", pady=2)
-
-        ttk.Label(calc_detail, text="Facteur convertisseur").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=2)
-        ttk.Label(calc_detail, textvariable=self.converter_factor_var, font=("Segoe UI", 10, "bold")).grid(row=5, column=1, sticky="w", pady=2)
-        ttk.Label(calc_detail, text="Pic convertisseur (tranche)").grid(row=5, column=2, sticky="w", padx=(20, 8), pady=2)
-        ttk.Label(calc_detail, textvariable=self.converter_peak_var, font=("Segoe UI", 10, "bold")).grid(row=5, column=3, sticky="w", pady=2)
+        ttk.Label(calc_detail, text="Option retenue").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(calc_detail, textvariable=self.panel_recommendation_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=1, sticky="w", pady=2)
+        ttk.Label(calc_detail, text="Ratio prix / energie").grid(row=4, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(calc_detail, textvariable=self.panel_ratio_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=3, sticky="w", pady=2)
 
         detail = ttk.LabelFrame(self.tab_balance, text="Besoin en energie par tranche", padding=10)
         detail.pack(fill="both", expand=True)
 
-        cols = ("slot", "need", "converter")
+        cols = ("slot", "need")
         self.balance_tree = ttk.Treeview(detail, columns=cols, show="headings", height=8)
         self.balance_tree.heading("slot", text="Tranche")
         self.balance_tree.heading("need", text="Besoin W")
-        self.balance_tree.heading("converter", text="Convertisseur W")
         self.balance_tree.column("slot", width=220, anchor="w")
-        self.balance_tree.column("need", width=160, anchor="w")
-        self.balance_tree.column("converter", width=180, anchor="w")
+        self.balance_tree.column("need", width=200, anchor="w")
         self.balance_tree.pack(fill="both", expand=True)
 
     def _build_config_tab(self) -> None:
@@ -564,32 +564,41 @@ class SolarApp:
         rows = self.panel_type_crud.list_panel_types()
         self.panel_type_tree.delete(*self.panel_type_tree.get_children())
         self.panel_need_reference_var.set(f"{self.last_panel_need_w:.2f} W")
+        comparison = self.spec_service.build_panel_options(rows, self.last_panel_need_w)
+        self.panel_options = comparison.get("options", [])
+        self.panel_best_option = comparison.get("best_option")
 
-        for row in rows:
-            panel_type_id = row[0]
-            type_name = row[1]
-            exploitable_pct = float(row[2])
-            unit_energy_w = float(row[3])
-            unit_price_ar = float(row[4])
-            usable_energy_w = float(row[5])
-            description = row[6] or ""
+        if self.panel_best_option:
+            self.panel_recommendation_var.set(
+                f"{self.panel_best_option['type_name']} | {int(self.panel_best_option['panel_count'])} panneaux | {float(self.panel_best_option['total_cost_ar']):.2f} Ar"
+            )
+            self.panel_ratio_var.set(f"{float(self.panel_best_option['ratio_price_per_energy']):.2f} Ar/W")
+            self.panel_best_cost_var.set(f"{float(self.panel_best_option['total_cost_ar']):.2f} Ar")
+            self.panel_best_count_var.set(str(int(self.panel_best_option['panel_count'])))
+            self.panel_best_energy_var.set(f"{float(self.panel_best_option['supplied_energy_w']):.2f} W")
+        else:
+            self.panel_recommendation_var.set("Aucune recommandation")
+            self.panel_ratio_var.set("0.00 Ar/W")
+            self.panel_best_cost_var.set("0 Ar")
+            self.panel_best_count_var.set("0")
+            self.panel_best_energy_var.set("0 W")
 
-            panel_count = math.ceil(self.last_panel_need_w / usable_energy_w) if usable_energy_w > 0 and self.last_panel_need_w > 0 else 0
-            total_cost_ar = panel_count * unit_price_ar
-
+        for option in self.panel_options:
             self.panel_type_tree.insert(
                 "",
                 "end",
                 values=(
-                    panel_type_id,
-                    type_name,
-                    f"{exploitable_pct:.2f}",
-                    f"{unit_energy_w:.2f}",
-                    f"{usable_energy_w:.2f}",
-                    f"{unit_price_ar:.2f}",
-                    str(panel_count),
-                    f"{total_cost_ar:.2f}",
-                    description,
+                    option["panel_type_id"],
+                    option["type_name"],
+                    f"{float(option['exploitable_pct']):.2f}",
+                    f"{float(option['unit_energy_w']):.2f}",
+                    f"{float(option['usable_energy_w']):.2f}",
+                    f"{float(option['unit_price_ar']):.2f}",
+                    str(int(option["panel_count"])),
+                    f"{float(option['total_cost_ar']):.2f}",
+                    f"{float(option['ratio_price_per_energy']):.2f}",
+                    "Oui" if self.panel_best_option and option["panel_type_id"] == self.panel_best_option["panel_type_id"] else "",
+                    option["description"],
                 ),
             )
 
@@ -853,22 +862,14 @@ class SolarApp:
         )
 
         self.total_var.set(f"{spec['total_wh']:.2f} W")
-        self.practical_need_var.set(f"{spec['practical_need_wh']:.2f} W")
         self.panel_var.set(f"{spec['panel_w']:.2f} W")
         self.last_panel_need_w = float(spec['panel_w'])
         self.battery_var.set(f"{spec['battery_wh']:.2f} W")
         self.charge_window_var.set(f"{spec['charge_window_hours']:.2f} h")
         charge_power_w = spec['battery_wh'] / spec['charge_window_hours'] if spec['charge_window_hours'] > 0 else 0.0
         self.charge_energy_var.set(f"{charge_power_w:.2f} W")
-        self.converter_total_var.set(f"{spec['converter_total_w']:.2f} W")
-        self.energy_supplied_var.set(f"{spec['energy_supplied_w']:.2f} W")
-        self.converter_factor_var.set(f"x{float(spec.get('converter_factor', 2.0)):.2f}")
-        self.converter_peak_var.set(
-            f"{spec.get('converter_peak_slot', '-') } ({float(spec.get('converter_peak_w', 0.0)):.2f} W)"
-        )
 
         by_slot = spec.get("by_slot", {})
-        converter_by_slot = spec.get("converter_by_slot_w", {})
         self.day_need_var.set(f"{float(by_slot.get('JOUR', 0.0)):.2f} W")
         self.evening_need_var.set(f"{float(by_slot.get('SOIR', 0.0)):.2f} W")
         self.evening_solar_var.set(f"{float(spec.get('evening_solar_wh', 0.0)):.2f} W")
@@ -877,16 +878,7 @@ class SolarApp:
 
         self.balance_tree.delete(*self.balance_tree.get_children())
         for name, wh in spec["rows_wh"]:
-            slot_key = str(name).strip().upper()
-            self.balance_tree.insert(
-                "",
-                "end",
-                values=(
-                    name,
-                    f"{float(wh):.2f}",
-                    f"{float(converter_by_slot.get(slot_key, 0.0)):.2f}",
-                ),
-            )
+            self.balance_tree.insert("", "end", values=(name, f"{float(wh):.2f}"))
 
         self.refresh_panel_types()
 

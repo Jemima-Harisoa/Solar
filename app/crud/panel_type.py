@@ -2,6 +2,13 @@ from app.crud.base import BaseCrud
 
 
 class PanelTypeCrud(BaseCrud):
+
+    # reinitialiser la table type panel pour mettre de nouvel donne  
+    def truncate(self):
+        """Vider la table PanelType."""
+        self.execute("TRUNCATE TABLE PanelType")
+        return True
+
     def create_panel_type(
         self,
         type_name: str,

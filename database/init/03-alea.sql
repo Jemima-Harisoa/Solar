@@ -32,3 +32,28 @@ BEGIN
 	);
 END;
 GO
+
+/* =========================
+   DONNEES D'EXEMPLE PANNEAUX
+   ========================= */
+
+IF NOT EXISTS (SELECT 1 FROM PanelType WHERE TypeName = N'PANNEAU 100W 25%')
+BEGIN
+	INSERT INTO PanelType (TypeName, ExploitablePct, UnitEnergyW, UnitPriceAr, Description)
+	VALUES (N'PANNEAU 100W 25%', 25, 100, 180000, N'Exemple : 100W brut, 25% exploitable, soit 25W utiles');
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM PanelType WHERE TypeName = N'PANNEAU 200W 35%')
+BEGIN
+	INSERT INTO PanelType (TypeName, ExploitablePct, UnitEnergyW, UnitPriceAr, Description)
+	VALUES (N'PANNEAU 200W 35%', 35, 200, 320000, N'Panneau plus puissant pour besoins moyens');
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM PanelType WHERE TypeName = N'PANNEAU 400W 40%')
+BEGIN
+	INSERT INTO PanelType (TypeName, ExploitablePct, UnitEnergyW, UnitPriceAr, Description)
+	VALUES (N'PANNEAU 400W 40%', 40, 400, 580000, N'Panneau haut rendement pour besoins plus importants');
+END;
+GO

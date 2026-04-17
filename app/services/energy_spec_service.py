@@ -1,3 +1,6 @@
+import math
+
+
 class EnergySpecService:
     @staticmethod
     def build_spec(
@@ -95,4 +98,56 @@ class EnergySpecService:
             "converter_factor": converter_factor,
             "converter_peak_slot": converter_peak_slot,
             "converter_peak_w": converter_peak_w,
+        }
+
+    @staticmethod
+    def build_panel_options(panel_type_rows: list[tuple], required_energy_w: float) -> dict:
+        options: list[dict] = []
+
+        for row in panel_type_rows:
+            panel_type_id = row[0]
+            type_name = str(row[1])
+            exploitable_pct = float(row[2])
+            unit_energy_w = float(row[3])
+            unit_price_ar = float(row[4])
+            usable_energy_w = float(row[5]) if len(row) > 5 and row[5] is not None else unit_energy_w * exploitable_pct / 100.0
+            description = row[6] if len(row) > 6 else None
+
+            panel_count = math.ceil(required_energy_w / usable_energy_w) if required_energy_w > 0 and usable_energy_w > 0 else 0
+            supplied_energy_w = panel_count * usable_energy_w
+            total_cost_ar = panel_count * unit_price_ar
+            ratio_price_per_energy = total_cost_ar / supplied_energy_w if supplied_energy_w > 0 else 0.0
+
+            options.append(
+                {
+                    "panel_type_id": panel_type_id,
+                    "type_name": type_name,
+                    "exploitable_pct": exploitable_pct,
+                    "unit_energy_w": unit_energy_w,
+                    "usable_energy_w": usable_energy_w,
+                    "unit_price_ar": unit_price_ar,
+                    "panel_count": panel_count,
+                    "supplied_energy_w": supplied_energy_w,
+                    "total_cost_ar": total_cost_ar,
+                    "ratio_price_per_energy": ratio_price_per_energy,
+                    "description": description or "",
+                }
+            )
+
+        best_option = None
+        if options and required_energy_w > 0:
+            best_option = min(
+                options,
+                key=lambda item: (
+                    item["ratio_price_per_energy"],
+                    item["total_cost_ar"],
+                    item["panel_count"],
+                    item["type_name"],
+                ),
+            )
+
+        return {
+            "required_energy_w": required_energy_w,
+            "options": options,
+            "best_option": best_option,
         }
