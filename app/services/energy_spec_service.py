@@ -3,13 +3,29 @@ import math
 
 class EnergySpecService:
     @staticmethod
+    def _normalize_slot_name(name: str) -> str:
+        normalized = str(name).strip().upper()
+        mapping = {
+            "T1": "JOUR",
+            "T2": "SOIR",
+            "T3": "NUIT",
+            "DAY": "JOUR",
+            "EVENING": "SOIR",
+            "NIGHT": "NUIT",
+        }
+        return mapping.get(normalized, normalized)
+
+    @staticmethod
     def build_spec(
         slot_rows: list[tuple],
         efficiency_pct: float,
         battery_overcapacity_pct: float,
         slot_hours_by_name: dict[str, float] | None = None,
     ) -> dict:
-        by_slot = {str(name).strip().upper(): float(wh) for name, wh in slot_rows}
+        by_slot = {}
+        for name, wh in slot_rows:
+            slot_name = EnergySpecService._normalize_slot_name(name)
+            by_slot[slot_name] = by_slot.get(slot_name, 0.0) + float(wh)
 
         # Tranches metier fixes:
         # - JOUR (6h-17h): production solaire
@@ -31,7 +47,7 @@ class EnergySpecService:
         # Recharge dynamique uniquement avant 17h sur le creneau JOUR.
         # Si la duree n'est pas disponible, fallback sur la fenetre standard 6h-17h.
         normalized_hours = {
-            str(name).strip().upper(): float(hours)
+            EnergySpecService._normalize_slot_name(name): float(hours)
             for name, hours in (slot_hours_by_name or {}).items()
         }
         default_slot_hours = {"JOUR": 11.0, "SOIR": 2.0, "NUIT": 11.0}
@@ -40,9 +56,11 @@ class EnergySpecService:
             hours = normalized_hours.get(slot_name, default_slot_hours[slot_name])
             return hours if hours > 0 else default_slot_hours[slot_name]
 
-        day_hours = _slot_hours("JOUR")
-        evening_hours = _slot_hours("SOIR")
-        night_hours = _slot_hours("NUIT")
+        slot_hours = {
+            "JOUR": _slot_hours("JOUR"),
+            "SOIR": _slot_hours("SOIR"),
+            "NUIT": _slot_hours("NUIT"),
+        }
 
         charge_window_hours = normalized_hours.get("JOUR", 0.0)
         if charge_window_hours <= 0:
@@ -53,19 +71,23 @@ class EnergySpecService:
             "SOIR": evening_wh,
             "NUIT": night_wh,
         }
-        rows_wh = [(name, by_slot_wh.get(str(name).strip().upper(), 0.0)) for name, _ in slot_rows]
+        rows_wh = [(EnergySpecService._normalize_slot_name(name), float(wh)) for name, wh in slot_rows]
 
         # Si slot == Soir quota paneau => energie soir X2 => production en soire -1/2 faible ecelrage lumineu 
         
-        # Dimensionnement convertisseur: 2x la consommation de la tranche.
+        # Dimensionnement convertisseur: 2x la puissance moyenne de la tranche.
+        # La conso est en Wh, donc conversion en W via division par la duree du creneau.
         converter_factor = 2.0
         converter_by_slot_w = {
-            slot_name: slot_value * 2.0
+            slot_name: (slot_value / slot_hours[slot_name]) * converter_factor if slot_hours[slot_name] > 0 else 0.0
             for slot_name, slot_value in by_slot_wh.items()
         }
         converter_total_w = sum(converter_by_slot_w.values())
         energy_supplied_w = converter_total_w
-        converter_rows_w = [(name, converter_by_slot_w.get(str(name).strip().upper(), 0.0)) for name, _ in slot_rows]
+        converter_rows_w = [
+            (name, converter_by_slot_w.get(EnergySpecService._normalize_slot_name(name), 0.0))
+            for name, _ in slot_rows
+        ]
         if converter_by_slot_w:
             converter_peak_slot, converter_peak_w = max(converter_by_slot_w.items(), key=lambda item: item[1])
         else:
@@ -75,8 +97,13 @@ class EnergySpecService:
         # consommation JOUR + part solaire du SOIR + energie a stocker pour batterie.
         practical_need_wh = day_wh + evening_solar_wh + battery_wh
 
-        # Rendement panneaux applique sur le besoin pratique.
-        panel_w = 0.0 if efficiency_pct <= 0 else practical_need_wh * 100.0 / efficiency_pct
+        # Dimensionnement panneaux en puissance (W):
+        # besoin journalier (Wh) / fenetre de production (h).
+        # Le rendement est applique par type de panneau via ExploitablePct (UsableEnergyW).
+        _ = efficiency_pct  # Conservé pour compatibilite des appels existants.
+        panel_w = 0.0
+        if charge_window_hours > 0:
+            panel_w = practical_need_wh / charge_window_hours
 
         return {
             "total_wh": total_wh,

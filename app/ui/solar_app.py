@@ -111,7 +111,7 @@ class SolarApp:
         self.device_type_combo.bind("<<ComboboxSelected>>", lambda _event: self._update_selected_type_role())
         ttk.Label(left, text="Role energetique").pack(anchor="w", pady=(4, 0))
         ttk.Label(left, textvariable=self.device_role_var, font=("Segoe UI", 10, "bold")).pack(anchor="w")
-        self._entry(left, "Puissance (Wh)", self.device_power_var)
+        self._entry(left, "Puissance (W)", self.device_power_var)
         self._entry(left, "Date installation (YYYY-MM-DD)", self.device_date_var)
         self._combo(left, "Statut", self.device_status_var, ["ACTIF", "INACTIF", "MAINTEN"])
         self._entry(left, "Description", self.device_desc_var)
@@ -120,6 +120,7 @@ class SolarApp:
         act.pack(fill="x", pady=(8, 0))
         ttk.Button(act, text="Ajouter", command=lambda: self._safe(self.add_device)).pack(side="left")
         ttk.Button(act, text="Rafraichir", command=lambda: self._safe(self.refresh_devices)).pack(side="left", padx=6)
+        ttk.Button(act, text="Reinitialiser", command=lambda: self._safe(self.truncate_devices)).pack(side="left", padx=6)
 
         cols = ("id", "code", "name", "type", "role", "power", "status", "date")
         self.device_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
@@ -158,6 +159,7 @@ class SolarApp:
         act.pack(fill="x", pady=(8, 0))
         ttk.Button(act, text="Ajouter", command=lambda: self._safe(self.add_slot)).pack(side="left")
         ttk.Button(act, text="Rafraichir", command=lambda: self._safe(self.refresh_slots)).pack(side="left", padx=6)
+        ttk.Button(act, text="Reinitialiser", command=lambda: self._safe(self.truncate_slots)).pack(side="left", padx=6)
 
         cols = ("id", "name", "start", "end", "desc")
         self.slot_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
@@ -193,6 +195,7 @@ class SolarApp:
         act.pack(fill="x", pady=(8, 0))
         ttk.Button(act, text="Ajouter / Mettre a jour", command=lambda: self._safe(self.upsert_usage)).pack(side="left")
         ttk.Button(act, text="Rafraichir", command=lambda: self._safe(self.refresh_usage)).pack(side="left", padx=6)
+        ttk.Button(act, text="Reinitialiser", command=lambda: self._safe(self.truncate_usage)).pack(side="left", padx=6)
 
         cols = ("id", "device", "slot", "hours", "consumption", "enabled")
         self.usage_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
@@ -213,6 +216,7 @@ class SolarApp:
         top.pack(fill="x", pady=(0, 8))
 
         ttk.Label(top, text="Historique des depenses energetiques", font=("Segoe UI", 11, "bold")).pack(side="left")
+        ttk.Button(top, text="Reinitialiser", command=lambda: self._safe(self.truncate_history)).pack(side="right", padx=(0, 6))
         ttk.Button(top, text="Rafraichir", command=lambda: self._safe(self.refresh_history)).pack(side="right")
 
         cols = ("id", "date", "device", "slot", "energy", "duration", "notes")
@@ -253,6 +257,7 @@ class SolarApp:
         actions.pack(fill="x", pady=(8, 0))
         ttk.Button(actions, text="Ajouter", command=lambda: self._safe(self.add_panel_type)).pack(side="left")
         ttk.Button(actions, text="Rafraichir", command=lambda: self._safe(self.refresh_panel_types)).pack(side="left", padx=6)
+        ttk.Button(actions, text="Reinitialiser", command=lambda: self._safe(self.truncate_panel_types)).pack(side="left", padx=6)
 
         ttk.Label(left, text="Besoin de reference (W)").pack(anchor="w", pady=(10, 0))
         ttk.Label(left, textvariable=self.panel_need_reference_var, font=("Segoe UI", 10, "bold")).pack(anchor="w")
@@ -261,7 +266,7 @@ class SolarApp:
         ttk.Label(left, text="Ratio prix / energie").pack(anchor="w", pady=(10, 0))
         ttk.Label(left, textvariable=self.panel_ratio_var, font=("Segoe UI", 10, "bold")).pack(anchor="w")
 
-        cols = ("id", "name", "pct", "energy", "usable", "price", "count", "cost", "ratio", "best", "desc")
+        cols = ("id", "name", "pct", "energy", "usable", "price", "count", "supplied", "cost", "ratio", "best", "desc")
         self.panel_type_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
         for col, title, width in [
             ("id", "ID", 60),
@@ -271,6 +276,7 @@ class SolarApp:
             ("usable", "Energie utile W", 130),
             ("price", "Prix unitaire Ar", 130),
             ("count", "Nb panneaux", 100),
+            ("supplied", "Energie totale W", 130),
             ("cost", "Cout total Ar", 120),
             ("ratio", "Ratio Ar/W", 100),
             ("best", "Best", 70),
@@ -302,14 +308,14 @@ class SolarApp:
         cards = ttk.LabelFrame(self.tab_balance, text="Sorties principales", padding=10)
         cards.pack(fill="x", pady=(0, 8))
 
-        self.total_var = tk.StringVar(value="0 W")
+        self.total_var = tk.StringVar(value="0 Wh")
         self.panel_var = tk.StringVar(value="0 W")
-        self.battery_var = tk.StringVar(value="0 W")
-        self.day_need_var = tk.StringVar(value="0 W")
-        self.evening_need_var = tk.StringVar(value="0 W")
-        self.evening_solar_var = tk.StringVar(value="0 W")
-        self.evening_battery_var = tk.StringVar(value="0 W")
-        self.night_need_var = tk.StringVar(value="0 W")
+        self.battery_var = tk.StringVar(value="0 Wh")
+        self.day_need_var = tk.StringVar(value="0 Wh")
+        self.evening_need_var = tk.StringVar(value="0 Wh")
+        self.evening_solar_var = tk.StringVar(value="0 Wh")
+        self.evening_battery_var = tk.StringVar(value="0 Wh")
+        self.night_need_var = tk.StringVar(value="0 Wh")
         self.charge_window_var = tk.StringVar(value="0 h")
         self.charge_energy_var = tk.StringVar(value="0 W")
         self.panel_best_cost_var = tk.StringVar(value="0 Ar")
@@ -318,7 +324,7 @@ class SolarApp:
 
         self._metric(cards, 0, "Depense totale", self.total_var)
         self._metric(cards, 1, "Panneaux requis", self.panel_var)
-        self._metric(cards, 2, "Puissance batterie", self.battery_var)
+        self._metric(cards, 2, "Capacite batterie", self.battery_var)
         self._metric(cards, 3, "Cout option retenue", self.panel_best_cost_var)
         self._metric(cards, 4, "Energie retenue", self.panel_best_energy_var)
 
@@ -342,7 +348,7 @@ class SolarApp:
 
         ttk.Label(calc_detail, text="Fenetre de recharge batterie").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.charge_window_var, font=("Segoe UI", 10, "bold")).grid(row=3, column=1, sticky="w", pady=2)
-        ttk.Label(calc_detail, text="Puissance de recharge batterie (Wh)").grid(row=3, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(calc_detail, text="Puissance de recharge batterie (W)").grid(row=3, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.charge_energy_var, font=("Segoe UI", 10, "bold")).grid(row=3, column=3, sticky="w", pady=2)
 
         ttk.Label(calc_detail, text="Option retenue").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=2)
@@ -356,7 +362,7 @@ class SolarApp:
         cols = ("slot", "need")
         self.balance_tree = ttk.Treeview(detail, columns=cols, show="headings", height=8)
         self.balance_tree.heading("slot", text="Tranche")
-        self.balance_tree.heading("need", text="Besoin W")
+        self.balance_tree.heading("need", text="Besoin Wh")
         self.balance_tree.column("slot", width=220, anchor="w")
         self.balance_tree.column("need", width=200, anchor="w")
         self.balance_tree.pack(fill="both", expand=True)
@@ -375,7 +381,7 @@ class SolarApp:
         self.config_active_var = tk.BooleanVar(value=False)
 
         self._entry(left, "Tension secteur (V)", self.config_grid_voltage_var)
-        self._entry(left, "Rendement panneaux (%)", self.config_efficiency_var)
+        self._entry(left, "Rendement global (%) - info", self.config_efficiency_var)
         self._entry(left, "Marge batterie (%)", self.config_battery_var)
         self._entry(left, "Description", self.config_desc_var)
         ttk.Checkbutton(left, text="Activer cette configuration", variable=self.config_active_var).pack(anchor="w", pady=(4, 8))
@@ -595,6 +601,7 @@ class SolarApp:
                     f"{float(option['usable_energy_w']):.2f}",
                     f"{float(option['unit_price_ar']):.2f}",
                     str(int(option["panel_count"])),
+                    f"{float(option['supplied_energy_w']):.2f}",
                     f"{float(option['total_cost_ar']):.2f}",
                     f"{float(option['ratio_price_per_energy']):.2f}",
                     "Oui" if self.panel_best_option and option["panel_type_id"] == self.panel_best_option["panel_type_id"] else "",
@@ -761,6 +768,50 @@ class SolarApp:
         self.refresh_configurations()
         self.status_var.set("Table des configurations reinitialisee")
 
+    def truncate_devices(self) -> None:
+        if not messagebox.askyesno("Confirmation", "Vider tous les materiels et leurs dependances (usage, historique) ?"):
+            return
+
+        self.device_crud.truncate()
+        self.refresh_devices()
+        self.refresh_usage()
+        self.refresh_history()
+        self.status_var.set("Table des materiels et dependances reinitialisee")
+
+    def truncate_slots(self) -> None:
+        if not messagebox.askyesno("Confirmation", "Vider tous les creneaux et leurs dependances (usage, historique) ?"):
+            return
+
+        self.timeslot_crud.truncate()
+        self.refresh_slots()
+        self.refresh_usage()
+        self.refresh_history()
+        self.status_var.set("Table des creneaux et dependances reinitialisee")
+
+    def truncate_usage(self) -> None:
+        if not messagebox.askyesno("Confirmation", "Vider tous les usages ?"):
+            return
+
+        self.usage_crud.truncate()
+        self.refresh_usage()
+        self.status_var.set("Table des usages reinitialisee")
+
+    def truncate_history(self) -> None:
+        if not messagebox.askyesno("Confirmation", "Vider tout l'historique de consommation ?"):
+            return
+
+        self.history_crud.truncate()
+        self.refresh_history()
+        self.status_var.set("Table d'historique reinitialisee")
+
+    def truncate_panel_types(self) -> None:
+        if not messagebox.askyesno("Confirmation", "Vider tous les types de panneaux ?"):
+            return
+
+        self.panel_type_crud.truncate()
+        self.refresh_panel_types()
+        self.status_var.set("Table des types de panneaux reinitialisee")
+
     def add_device(self) -> None:
         code = self.device_code_var.get().strip()
         name = self.device_name_var.get().strip()
@@ -861,20 +912,20 @@ class SolarApp:
             slot_hours_by_name=slot_hours_by_name,
         )
 
-        self.total_var.set(f"{spec['total_wh']:.2f} W")
+        self.total_var.set(f"{spec['total_wh']:.2f} Wh")
         self.panel_var.set(f"{spec['panel_w']:.2f} W")
         self.last_panel_need_w = float(spec['panel_w'])
-        self.battery_var.set(f"{spec['battery_wh']:.2f} W")
+        self.battery_var.set(f"{spec['battery_wh']:.2f} Wh")
         self.charge_window_var.set(f"{spec['charge_window_hours']:.2f} h")
         charge_power_w = spec['battery_wh'] / spec['charge_window_hours'] if spec['charge_window_hours'] > 0 else 0.0
         self.charge_energy_var.set(f"{charge_power_w:.2f} W")
 
         by_slot = spec.get("by_slot", {})
-        self.day_need_var.set(f"{float(by_slot.get('JOUR', 0.0)):.2f} W")
-        self.evening_need_var.set(f"{float(by_slot.get('SOIR', 0.0)):.2f} W")
-        self.evening_solar_var.set(f"{float(spec.get('evening_solar_wh', 0.0)):.2f} W")
-        self.evening_battery_var.set(f"{float(spec.get('evening_battery_wh', 0.0)):.2f} W")
-        self.night_need_var.set(f"{float(by_slot.get('NUIT', 0.0)):.2f} W")
+        self.day_need_var.set(f"{float(by_slot.get('JOUR', 0.0)):.2f} Wh")
+        self.evening_need_var.set(f"{float(by_slot.get('SOIR', 0.0)):.2f} Wh")
+        self.evening_solar_var.set(f"{float(spec.get('evening_solar_wh', 0.0)):.2f} Wh")
+        self.evening_battery_var.set(f"{float(spec.get('evening_battery_wh', 0.0)):.2f} Wh")
+        self.night_need_var.set(f"{float(by_slot.get('NUIT', 0.0)):.2f} Wh")
 
         self.balance_tree.delete(*self.balance_tree.get_children())
         for name, wh in spec["rows_wh"]:
