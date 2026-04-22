@@ -88,3 +88,11 @@ class DeviceUsageScheduleCrud(BaseCrud):
             ORDER BY ts.TimeSlotId
             """
         )
+
+    def truncate_usage(self) -> None:
+        self.execute(
+            """
+            DELETE FROM DeviceUsageSchedule;
+            DBCC CHECKIDENT ('DeviceUsageSchedule', RESEED, 0);
+            """
+        )

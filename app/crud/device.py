@@ -75,3 +75,21 @@ class DeviceCrud(BaseCrud):
             """,
             (code, name, device_type_id, power_w, description, installation_date, status),
         )
+
+    def truncate_devices_with_dependents(self) -> None:
+        self.execute(
+            """
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            DELETE FROM EnergyConsumption;
+            DELETE FROM DeviceUsageSchedule;
+            DELETE FROM Device;
+
+            DBCC CHECKIDENT ('EnergyConsumption', RESEED, 0);
+            DBCC CHECKIDENT ('DeviceUsageSchedule', RESEED, 0);
+            DBCC CHECKIDENT ('Device', RESEED, 0);
+
+            COMMIT TRANSACTION;
+            """
+        )

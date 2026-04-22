@@ -20,3 +20,25 @@ class TimeSlotCrud(BaseCrud):
             "INSERT INTO TimeSlot(SlotName, StartHour, EndHour, Description) VALUES(%s, %s, %s, %s)",
             (name, start_hour, end_hour, description),
         )
+
+    def truncate_timeslots_with_dependents(self) -> None:
+        self.execute(
+            """
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            DELETE FROM BatteryMovement;
+            DELETE FROM SolarPanelProduction;
+            DELETE FROM EnergyConsumption;
+            DELETE FROM DeviceUsageSchedule;
+            DELETE FROM TimeSlot;
+
+            DBCC CHECKIDENT ('BatteryMovement', RESEED, 0);
+            DBCC CHECKIDENT ('SolarPanelProduction', RESEED, 0);
+            DBCC CHECKIDENT ('EnergyConsumption', RESEED, 0);
+            DBCC CHECKIDENT ('DeviceUsageSchedule', RESEED, 0);
+            DBCC CHECKIDENT ('TimeSlot', RESEED, 0);
+
+            COMMIT TRANSACTION;
+            """
+        )
