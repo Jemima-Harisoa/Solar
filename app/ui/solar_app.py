@@ -184,11 +184,17 @@ class SolarApp:
         self.usage_device_var = tk.StringVar()
         self.usage_slot_var = tk.StringVar()
         self.usage_hours_var = tk.StringVar()
+        # [SOLAR-DEFERRED] Étape 4: Nouveaux champs temps d'usage
+        self.usage_start_time_var = tk.StringVar()
+        self.usage_end_time_var = tk.StringVar()
         self.usage_enabled_var = tk.BooleanVar(value=True)
 
         self.usage_device_combo = self._combo(left, "Materiel", self.usage_device_var)
         self.usage_slot_combo = self._combo(left, "Creneau", self.usage_slot_var)
         self._entry(left, "Heures/jour (h)", self.usage_hours_var)
+        # [SOLAR-DEFERRED] Entrées pour heure début et fin (format HH:MM)
+        self._entry(left, "Heure debut (HH:MM)", self.usage_start_time_var)
+        self._entry(left, "Heure fin (HH:MM)", self.usage_end_time_var)
         ttk.Checkbutton(left, text="Actif", variable=self.usage_enabled_var).pack(anchor="w", pady=(4, 8))
 
         act = ttk.Frame(left)
@@ -197,14 +203,16 @@ class SolarApp:
         ttk.Button(act, text="Rafraichir", command=lambda: self._safe(self.refresh_usage)).pack(side="left", padx=6)
         ttk.Button(act, text="Reinitialiser", command=lambda: self._safe(self.truncate_usage)).pack(side="left", padx=6)
 
-        cols = ("id", "device", "slot", "hours", "consumption", "enabled")
+        cols = ("id", "device", "slot", "hours", "consumption", "start_time", "end_time", "enabled")
         self.usage_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
         for col, title, width in [
             ("id", "ID", 60),
-            ("device", "Materiel", 220),
+            ("device", "Materiel", 200),
             ("slot", "Creneau", 130),
             ("hours", "Heures", 90),
             ("consumption", "Conso Wh", 110),
+            ("start_time", "Debut", 70),
+            ("end_time", "Fin", 70),
             ("enabled", "Actif", 80),
         ]:
             self.usage_tree.heading(col, text=title)
@@ -328,6 +336,7 @@ class SolarApp:
 
         self._metric(cards, 0, "Depense totale", self.total_var)
         self._metric(cards, 1, "Panneaux requis", self.panel_var)
+        # [SOLAR-DEFERRED] Affichage capacité batterie (à refactoriser)
         self._metric(cards, 2, "Capacite batterie", self.battery_var)
         self._metric(cards, 3, "Cout option retenue", self.panel_best_cost_var)
         self._metric(cards, 4, "Energie retenue", self.panel_best_energy_var)
@@ -340,16 +349,19 @@ class SolarApp:
         ttk.Label(calc_detail, text="Consommation SOIR").grid(row=0, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.evening_need_var, font=("Segoe UI", 10, "bold")).grid(row=0, column=3, sticky="w", pady=2)
 
+        # [SOLAR-DEFERRED] Affichage répartition batterie/panneaux le soir (à refactoriser)
         ttk.Label(calc_detail, text="SOIR fourni par panneaux (50%)").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.evening_solar_var, font=("Segoe UI", 10, "bold")).grid(row=1, column=1, sticky="w", pady=2)
         ttk.Label(calc_detail, text="SOIR fourni par batterie (50%)").grid(row=1, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.evening_battery_var, font=("Segoe UI", 10, "bold")).grid(row=1, column=3, sticky="w", pady=2)
 
+        # [SOLAR-DEFERRED] Affichage consommation nuit (à refactoriser)
         ttk.Label(calc_detail, text="Consommation NUIT").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.night_need_var, font=("Segoe UI", 10, "bold")).grid(row=2, column=1, sticky="w", pady=2)
         ttk.Label(calc_detail, text="Besoin panneau a couvrir (W)").grid(row=2, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.panel_need_reference_var, font=("Segoe UI", 10, "bold")).grid(row=2, column=3, sticky="w", pady=2)
 
+        # [SOLAR-DEFERRED] Affichage fenêtre recharge batterie (à refactoriser)
         ttk.Label(calc_detail, text="Fenetre de recharge batterie").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.charge_window_var, font=("Segoe UI", 10, "bold")).grid(row=3, column=1, sticky="w", pady=2)
         ttk.Label(calc_detail, text="Puissance de recharge batterie (W)").grid(row=3, column=2, sticky="w", padx=(20, 8), pady=2)
@@ -359,6 +371,25 @@ class SolarApp:
         ttk.Label(calc_detail, textvariable=self.panel_recommendation_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=1, sticky="w", pady=2)
         ttk.Label(calc_detail, text="Ratio prix / energie").grid(row=4, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.panel_ratio_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=3, sticky="w", pady=2)
+
+        # [SOLAR-DEFERRED] Étape 4: Section surplus solaire monétisable
+        surplus_frame = ttk.LabelFrame(self.tab_balance, text="Surplus solaire monétisable", padding=10)
+        surplus_frame.pack(fill="x", pady=(0, 8))
+
+        self.surplus_production_var = tk.StringVar(value="0 Wh")
+        self.surplus_consumption_var = tk.StringVar(value="0 Wh")
+        self.surplus_energy_var = tk.StringVar(value="0 Wh")
+        self.surplus_revenue_var = tk.StringVar(value="0 Ar")
+
+        ttk.Label(surplus_frame, text="Production solaire").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(surplus_frame, textvariable=self.surplus_production_var, font=("Segoe UI", 10, "bold")).grid(row=0, column=1, sticky="w", pady=2)
+        ttk.Label(surplus_frame, text="Consommation totale").grid(row=0, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(surplus_frame, textvariable=self.surplus_consumption_var, font=("Segoe UI", 10, "bold")).grid(row=0, column=3, sticky="w", pady=2)
+
+        ttk.Label(surplus_frame, text="Surplus exploitable").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(surplus_frame, textvariable=self.surplus_energy_var, font=("Segoe UI", 10, "bold")).grid(row=1, column=1, sticky="w", pady=2)
+        ttk.Label(surplus_frame, text="Revenu potentiel (Ar)").grid(row=1, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(surplus_frame, textvariable=self.surplus_revenue_var, font=("Segoe UI", 10, "bold")).grid(row=1, column=3, sticky="w", pady=2)
 
         detail = ttk.LabelFrame(self.tab_balance, text="Besoin en energie par tranche", padding=10)
         detail.pack(fill="both", expand=True)
@@ -867,6 +898,9 @@ class SolarApp:
         device_label = self.usage_device_var.get().strip()
         slot_label = self.usage_slot_var.get().strip()
         hours = float(self.usage_hours_var.get())
+        # [SOLAR-DEFERRED] Récupération et validation des heures de début/fin
+        start_time_str = self.usage_start_time_var.get().strip()
+        end_time_str = self.usage_end_time_var.get().strip()
         enabled = 1 if self.usage_enabled_var.get() else 0
 
         if device_label not in self.device_map:
@@ -880,12 +914,41 @@ class SolarApp:
             raise ValueError("DailyUsageHours doit etre superieur ou egal a 0.")
         if hours > max_slot_hours:
             raise ValueError(f"DailyUsageHours depasse la duree du creneau selectionne ({max_slot_hours:.2f} h max).")
+        
+        # [SOLAR-DEFERRED] Validation format HH:MM pour début/fin
+        usage_start_time = None
+        usage_end_time = None
+        if start_time_str:
+            try:
+                start_parts = start_time_str.split(":")
+                if len(start_parts) != 2:
+                    raise ValueError("Format invalide pour heure debut (attendu HH:MM)")
+                start_h, start_m = int(start_parts[0]), int(start_parts[1])
+                if start_h < 0 or start_h > 23 or start_m < 0 or start_m > 59:
+                    raise ValueError("Heure debut invalide (HH 0-23, MM 0-59)")
+                usage_start_time = f"{start_h:02d}:{start_m:02d}:00"
+            except (ValueError, IndexError) as e:
+                raise ValueError(f"Heure debut invalide: {e}")
+        
+        if end_time_str:
+            try:
+                end_parts = end_time_str.split(":")
+                if len(end_parts) != 2:
+                    raise ValueError("Format invalide pour heure fin (attendu HH:MM)")
+                end_h, end_m = int(end_parts[0]), int(end_parts[1])
+                if end_h < 0 or end_h > 23 or end_m < 0 or end_m > 59:
+                    raise ValueError("Heure fin invalide (HH 0-23, MM 0-59)")
+                usage_end_time = f"{end_h:02d}:{end_m:02d}:00"
+            except (ValueError, IndexError) as e:
+                raise ValueError(f"Heure fin invalide: {e}")
 
         self.usage_crud.upsert_usage(
             device_id=self.device_map[device_label],
             timeslot_id=self.slot_map[slot_label],
             daily_usage_hours=hours,
             is_enabled=enabled,
+            usage_start_time=usage_start_time,
+            usage_end_time=usage_end_time,
         )
 
         self.refresh_usage()
