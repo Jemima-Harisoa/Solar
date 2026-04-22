@@ -15,6 +15,33 @@ class EnergySpecService:
         }
         return mapping.get(normalized, normalized)
 
+    # [SOLAR-DEFERRED] Mini-fonctions pour calcul batterie (Étape 2: Refactoring)
+    @staticmethod
+    def _calculer_part_batterie_soir(evening_wh: float, solar_ratio: float = 0.5) -> tuple[float, float]:
+        """
+        Détermine la part de consommation soir alimentée par batterie vs panneaux.
+        Retourne: (evening_solar_wh, evening_battery_wh)
+        """
+        evening_solar_wh = evening_wh * solar_ratio
+        evening_battery_wh = evening_wh - evening_solar_wh
+        return evening_solar_wh, evening_battery_wh
+
+    @staticmethod
+    def _calculer_couverture_nuit(night_wh: float, evening_battery_wh: float) -> float:
+        """
+        Calcule l'énergie totale à stocker en batterie pour couvrir la nuit + part soir.
+        """
+        battery_base_wh = night_wh + evening_battery_wh
+        return battery_base_wh
+
+    @staticmethod
+    def _calculer_capacite_batterie(battery_base_wh: float, battery_overcapacity_pct: float) -> float:
+        """
+        Dimensionne la capacité batterie en appliquant la marge de sécurité.
+        """
+        battery_wh = battery_base_wh * (1.0 + battery_overcapacity_pct / 100.0)
+        return battery_wh
+
     @staticmethod
     def build_spec(
         slot_rows: list[tuple],
@@ -34,15 +61,15 @@ class EnergySpecService:
         day_wh = by_slot.get("JOUR", 0.0)
         evening_wh = by_slot.get("SOIR", 0.0)
         night_wh = by_slot.get("NUIT", 0.0)
-        evening_solar_ratio = 0.5
-        evening_solar_wh = evening_wh * evening_solar_ratio
-        evening_battery_wh = evening_wh - evening_solar_wh
+        # [SOLAR-DEFERRED] Appel mini-fonction _calculer_part_batterie_soir
+        evening_solar_wh, evening_battery_wh = EnergySpecService._calculer_part_batterie_soir(evening_wh)
 
         total_wh = day_wh + evening_wh + night_wh
 
-        # La batterie couvre la nuit + 50% du creneau SOIR, avec marge de securite.
-        battery_base_wh = night_wh + evening_battery_wh
-        battery_wh = battery_base_wh * (1.0 + battery_overcapacity_pct / 100.0)
+        # [SOLAR-DEFERRED] Appel mini-fonction _calculer_couverture_nuit
+        battery_base_wh = EnergySpecService._calculer_couverture_nuit(night_wh, evening_battery_wh)
+        # [SOLAR-DEFERRED] Appel mini-fonction _calculer_capacite_batterie
+        battery_wh = EnergySpecService._calculer_capacite_batterie(battery_base_wh, battery_overcapacity_pct)
 
         # Recharge dynamique uniquement avant 17h sur le creneau JOUR.
         # Si la duree n'est pas disponible, fallback sur la fenetre standard 6h-17h.
