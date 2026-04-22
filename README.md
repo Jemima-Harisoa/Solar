@@ -6,7 +6,8 @@ Developper une application desktop Python permettant de:
 - calculer la consommation energetique d'une maison,
 - analyser la consommation par tranche horaire,
 - dimensionner les besoins en panneaux solaires et en batterie,
-- proposer le type de panneau le plus pertinent selon le ratio prix/energie.
+- proposer le type de panneau le plus pertinent selon le ratio prix/energie,
+- monetiser le surplus solaire sur une fenetre de vente active.
 
 ## 2. Fonctionnalites principales
 
@@ -15,6 +16,7 @@ Developper une application desktop Python permettant de:
 - Gestion des types d'appareils et des appareils (code, nom, puissance, statut, date d'installation).
 - Gestion des creneaux horaires (avec support des creneaux traversant minuit).
 - Gestion des programmes d'usage par appareil et par creneau.
+- Saisie des horaires d'usage via `UsageStartTime` et `UsageEndTime`.
 - Historique de consommation energetique.
 
 ### 2.2 Gestion des configurations systeme
@@ -25,6 +27,9 @@ Developper une application desktop Python permettant de:
   - `GridVoltageV`
   - `SolarPanelEfficiencyPct` (information globale)
   - `BatteryOvercapacityPct`
+  - `EnergySellingPriceArWh`
+  - `SellingPriceStartDate`
+  - `SellingPriceEndDate`
 
 ### 2.3 Gestion des types de panneaux
 
@@ -32,8 +37,9 @@ Developper une application desktop Python permettant de:
 - Chaque type contient:
   - energie unitaire (`UnitEnergyW`),
   - capacite exploitable (`ExploitablePct`),
-  - energie utile calculee (`UsableEnergyW`),
-  - prix unitaire (`UnitPriceAr`).
+  - energie utile calculee (`UsableEnergyWh`),
+  - prix unitaire (`UnitPriceAr`),
+  - puissance de pointe (`PeakPowerWh`).
 - Comparaison automatique des options pour un besoin donne avec recommandation du meilleur ratio `Ar/W`.
 
 ### 2.4 Bilan energetique
@@ -49,6 +55,12 @@ Regles metier appliquees:
 - une marge batterie est appliquee via `BatteryOvercapacityPct`,
 - la puissance panneau requise est calculee sur la fenetre de recharge JOUR.
 
+Le bilan affiche aussi un bloc de monétisation du surplus solaire avec:
+- la production solaire,
+- la consommation totale,
+- le surplus exploitable,
+- le revenu potentiel en Ariary.
+
 ## 3. Interface utilisateur (Tkinter)
 
 L'application expose 7 onglets:
@@ -63,6 +75,8 @@ L'application expose 7 onglets:
 Points notables:
 - verrouillage progressif de certaines etapes selon l'etat des donnees,
 - generation du bilan energetique avec details par tranche,
+- affichage des champs d'heure de debut et d'heure de fin sur l'onglet Usage,
+- section "Surplus solaire monétisable" dans l'onglet Bilan,
 - recommandation automatique de type de panneau (cout total, nombre de panneaux, ratio prix/energie),
 - gestion des erreurs avec rollback SQL automatique.
 
@@ -182,3 +196,16 @@ Workflow GitHub Actions: `.github/workflows/ci-cd.yml`
 - `pymssql==2.3.5`
 - `pytest==8.3.5`
 - `pyinstaller==6.13.0`
+
+## 10. Tests
+
+- Les tests unitaires de `EnergySpecService` couvrent la monétisation du surplus solaire.
+- Fichier de test: `test_energy_spec_service.py`
+- Cas couverts:
+  - pas d'usage,
+  - usage complet,
+  - usage partiel,
+  - usages chevauchants,
+  - usage hors fenetre,
+  - usage traversant la fenetre,
+  - prix de vente nul.
