@@ -205,3 +205,107 @@ class EnergySpecService:
             "options": options,
             "best_option": best_option,
         }
+
+    # [SOLAR-DEFERRED] Étape 3: Calcul surplus monétisable
+    @staticmethod
+    def calculer_surplus_monetisable(
+        fenetre_solaire: tuple[float, float],
+        production_par_creneau: dict[str, float],
+        usages: list[dict],
+        prix_vente_ar_wh: float,
+    ) -> dict:
+        """
+        Calcule l'énergie monétisable (surplus solaire) par créneau.
+        
+        Args:
+            fenetre_solaire: (heure_debut, heure_fin) de la fenêtre active (e.g., (8, 17))
+            production_par_creneau: {"JOUR": Wh, "SOIR": Wh, "NUIT": Wh}
+            usages: list[{"creneau": str, "energie_wh": float, "heure_debut": float, "heure_fin": float}]
+            prix_vente_ar_wh: prix de vente en Ar/Wh
+        
+        Returns:
+            dict with per-créneau breakdown:
+            {
+                "JOUR": {
+                    "production_wh": float,
+                    "consommation_wh": float,
+                    "surplus_wh": float,
+                    "revenu_ar": float,
+                },
+                "SOIR": {...},
+                "NUIT": {...},
+                "total": {
+                    "production_wh": float,
+                    "consommation_wh": float,
+                    "surplus_wh": float,
+                    "revenu_ar": float,
+                }
+            }
+        """
+        # Fenêtre de monétisation: seule la production DANS fenetre_solaire compte
+        fenetre_debut, fenetre_fin = fenetre_solaire
+        
+        # Créneau fixes per business logic
+        creneaux_ranges = {
+            "JOUR": (6.0, 17.0),      # 6h-17h: production maximale
+            "SOIR": (17.0, 19.0),     # 17h-19h: production réduite mais possible
+            "NUIT": (19.0, 6.0),      # 19h-6h: batterie uniquement
+        }
+        
+        # Normaliser créneau d'usage
+        def normaliser_creneau(nom: str) -> str:
+            return EnergySpecService._normalize_slot_name(nom)
+        
+        # Calculer consommation par créneau (en dehors de la fenêtre = 0 revenu potentiel)
+        consommation_par_creneau = {"JOUR": 0.0, "SOIR": 0.0, "NUIT": 0.0}
+        for usage in usages:
+            creneau_nom = normaliser_creneau(usage.get("creneau", ""))
+            if creneau_nom in consommation_par_creneau:
+                # Énergie utilisée dans le créneau
+                energie_wh = float(usage.get("energie_wh", 0.0))
+                consommation_par_creneau[creneau_nom] += energie_wh
+        
+        # Calculer surplus ET revenu par créneau
+        resultats_par_creneau = {}
+        production_totale = 0.0
+        consommation_totale = 0.0
+        surplus_total = 0.0
+        revenu_total = 0.0
+        
+        for creneau_nom in ["JOUR", "SOIR", "NUIT"]:
+            production_wh = float(production_par_creneau.get(creneau_nom, 0.0))
+            consommation_wh = float(consommation_par_creneau.get(creneau_nom, 0.0))
+            
+            # Surplus = production - consommation (min 0)
+            surplus_wh = max(0.0, production_wh - consommation_wh)
+            
+            # Seul le surplus DANS la fenêtre solaire génère du revenu
+            # Si créneau en dehors fenêtre => revenu = 0
+            creneau_debut, creneau_fin = creneaux_ranges[creneau_nom]
+            
+            # Déterminer si créneau chevauche fenêtre de monétisation
+            revenu_ar = 0.0
+            if (creneau_debut < fenetre_fin and creneau_fin > fenetre_debut):
+                # Créneau chevauche fenêtre solaire => revenu possible
+                revenu_ar = surplus_wh * prix_vente_ar_wh
+            
+            resultats_par_creneau[creneau_nom] = {
+                "production_wh": production_wh,
+                "consommation_wh": consommation_wh,
+                "surplus_wh": surplus_wh,
+                "revenu_ar": revenu_ar,
+            }
+            
+            production_totale += production_wh
+            consommation_totale += consommation_wh
+            surplus_total += surplus_wh
+            revenu_total += revenu_ar
+        
+        resultats_par_creneau["total"] = {
+            "production_wh": production_totale,
+            "consommation_wh": consommation_totale,
+            "surplus_wh": surplus_total,
+            "revenu_ar": revenu_total,
+        }
+        
+        return resultats_par_creneau
