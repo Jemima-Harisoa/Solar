@@ -530,20 +530,9 @@ class SolarApp:
         self.status_var.set("Donnees chargees")
 
     def _update_step_lock(self) -> None:
-        devices = int(self.recap_device_var.get())
-        slots = int(self.recap_slot_var.get())
-        if devices == 0:
-            self.notebook.tab(2, state="disabled")
-            self.notebook.tab(3, state="disabled")
-            self.notebook.tab(4, state="disabled")
-        elif slots == 0:
-            self.notebook.tab(2, state="disabled")
-            self.notebook.tab(3, state="normal")
-            self.notebook.tab(4, state="disabled")
-        else:
-            self.notebook.tab(2, state="normal")
-            self.notebook.tab(3, state="normal")
-            self.notebook.tab(4, state="normal")
+        self.notebook.tab(2, state="normal")
+        self.notebook.tab(3, state="normal")
+        self.notebook.tab(4, state="normal")
 
     def refresh_device_types(self) -> None:
         rows = self.device_type_crud.list_types_with_role()
