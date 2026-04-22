@@ -1,3 +1,7 @@
+# fichier de documentation  
+*.md
+!README.md
+
 # fichier de test 
 *.csv
 
