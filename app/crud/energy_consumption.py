@@ -2,6 +2,11 @@ from app.crud.base import BaseCrud
 
 
 class EnergyConsumptionCrud(BaseCrud):
+    def truncate(self) -> bool:
+        """Vider la table EnergyConsumption."""
+        self.execute("TRUNCATE TABLE EnergyConsumption")
+        return True
+
     def list_history(self, limit: int = 200) -> list[tuple]:
         return self.query(
             f"""

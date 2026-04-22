@@ -2,6 +2,13 @@ from app.crud.base import BaseCrud
 
 
 class DeviceCrud(BaseCrud):
+    def truncate(self) -> bool:
+        """Vider la table Device."""
+        self.execute("DELETE FROM DeviceUsageSchedule WHERE 1=1")
+        self.execute("DELETE FROM EnergyConsumption WHERE 1=1")
+        self.execute("DELETE FROM Device WHERE 1=1")
+        return True
+
     def list_devices(self) -> list[tuple]:
         return self.query(
             """

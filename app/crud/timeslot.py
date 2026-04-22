@@ -2,6 +2,13 @@ from app.crud.base import BaseCrud
 
 
 class TimeSlotCrud(BaseCrud):
+    def truncate(self) -> bool:
+        """Vider la table TimeSlot."""
+        self.execute("DELETE FROM DeviceUsageSchedule WHERE 1=1")
+        self.execute("DELETE FROM EnergyConsumption WHERE 1=1")
+        self.execute("TRUNCATE TABLE TimeSlot")
+        return True
+
     def list_timeslots(self) -> list[tuple]:
         return self.query("SELECT TimeSlotId, SlotName, StartHour, EndHour, ISNULL(Description, '') FROM TimeSlot ORDER BY TimeSlotId")
 

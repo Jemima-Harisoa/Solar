@@ -2,6 +2,11 @@ from app.crud.base import BaseCrud
 
 
 class DeviceUsageScheduleCrud(BaseCrud):
+    def truncate(self) -> bool:
+        """Vider la table DeviceUsageSchedule."""
+        self.execute("TRUNCATE TABLE DeviceUsageSchedule")
+        return True
+
     def list_usage(self) -> list[tuple]:
         return self.query(
             """

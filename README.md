@@ -1,441 +1,184 @@
-# Projet de gestion de consommation énergétique
+# Projet Solar - Gestion energetique domestique
 
 ## 1. Objectif
 
-Développer une application permettant de :
-- Calculer la consommation énergétique d’une maison
-- Analyser cette consommation selon différents critères
-- Déterminer les besoins en énergie (panneaux solaires et batteries)
-- Fournir un bilan énergétique global
+Developper une application desktop Python permettant de:
+- calculer la consommation energetique d'une maison,
+- analyser la consommation par tranche horaire,
+- dimensionner les besoins en panneaux solaires et en batterie,
+- proposer le type de panneau le plus pertinent selon le ratio prix/energie.
+
+## 2. Fonctionnalites principales
+
+### 2.1 Gestion des donnees metier
+
+- Gestion des types d'appareils et des appareils (code, nom, puissance, statut, date d'installation).
+- Gestion des creneaux horaires (avec support des creneaux traversant minuit).
+- Gestion des programmes d'usage par appareil et par creneau.
+- Historique de consommation energetique.
+
+### 2.2 Gestion des configurations systeme
+
+- Creation, mise a jour, suppression de configurations systeme.
+- Une seule configuration active a la fois (`IsActive = 1`).
+- Parametres utilises pour les calculs:
+  - `GridVoltageV`
+  - `SolarPanelEfficiencyPct` (information globale)
+  - `BatteryOvercapacityPct`
+
+### 2.3 Gestion des types de panneaux
+
+- CRUD des types de panneaux (`PanelType`).
+- Chaque type contient:
+  - energie unitaire (`UnitEnergyW`),
+  - capacite exploitable (`ExploitablePct`),
+  - energie utile calculee (`UsableEnergyW`),
+  - prix unitaire (`UnitPriceAr`).
+- Comparaison automatique des options pour un besoin donne avec recommandation du meilleur ratio `Ar/W`.
+
+### 2.4 Bilan energetique
+
+Le bilan prend en compte les tranches:
+- JOUR (6h-17h)
+- SOIR (17h-19h)
+- NUIT (19h-6h)
+
+Regles metier appliquees:
+- la tranche SOIR est couverte a 50% par le solaire et 50% par la batterie,
+- la batterie couvre la nuit + part batterie du soir,
+- une marge batterie est appliquee via `BatteryOvercapacityPct`,
+- la puissance panneau requise est calculee sur la fenetre de recharge JOUR.
+
+## 3. Interface utilisateur (Tkinter)
+
+L'application expose 7 onglets:
+1. Materiels
+2. Creneaux
+3. Usage
+4. Historique
+5. Bilan
+6. Configurations
+7. Types panneaux
+
+Points notables:
+- verrouillage progressif de certaines etapes selon l'etat des donnees,
+- generation du bilan energetique avec details par tranche,
+- recommandation automatique de type de panneau (cout total, nombre de panneaux, ratio prix/energie),
+- gestion des erreurs avec rollback SQL automatique.
+
+## 4. Architecture du projet
+
+- `main.py`: point d'entree, chargement environnement, normalisation host SQL local, lancement UI.
+- `app/config.py`: chargement `.env` et adaptation host Docker local.
+- `connection/server_connection.py`: wrapper de connexion SQL Server (`ServerConnect`) avec `commit`, `rollback`, `Disconnect`.
+- `app/crud/`: acces donnees SQL Server (Device, TimeSlot, Usage, History, Config, PanelType, etc.).
+- `app/services/energy_spec_service.py`: calculs de dimensionnement energetique et comparaison des panneaux.
+- `app/ui/solar_app.py`: UI Tkinter et orchestration metier.
+
+## 5. Base de donnees SQL Server
+
+### 5.1 Tables principales
+
+- `TimeSlot`
+- `SystemConfiguration`
+- `DeviceType`
+- `Device`
+- `DeviceUsageSchedule`
+- `EnergyConsumption`
+- `SolarPanelProduction`
+- `BatteryStorage`
+- `BatteryMovement`
+- `PanelType`
+
+### 5.2 Vues
+
+- `vw_DeviceUsageSchedule`
+- `vw_EnergyBalance`
+
+### 5.3 Scripts d'initialisation
+
+Ordre d'execution dans `database/init/`:
+1. `00-reset-base.sql`: reset des donnees metier (conserve `PanelType` et `SystemConfiguration`).
+2. `01-schema.sql`: creation schema principal (tables, vues, indexes).
+3. `02-data.sql`: seed de base (config, creneaux, appareils, usages, historique, production, batterie).
+4. `03-alea.sql`: creation/seed de `PanelType` (si absent).
+5. `04-data_import.sql`: jeu de donnees de test/import.
+6. `05-panel_types.sql`: reinitialisation + insertion de types de panneaux personnalises.
 
----
+## 6. Environnement et connexion SQL
 
-## 2. Fonctionnalités principales
-
-### 2.1 Calcul de la consommation énergétique
-
-#### Par matériel
-- Basé sur :
-  - La puissance de l’appareil
-  - Le temps d’utilisation
-
-#### Par tranche horaire
-- Journée : 6h - 17h
-- Soir : 17h - 19h
-- Nuit : 19h - 6h
-
----
-
-### 2.2 Affichage des résultats
-
-#### Par matériel
-- Consommation totale
-- Consommation par appareil selon l’usage
-
-#### Par tranche horaire
-- Consommation totale
-- Consommation par période (jour / soir / nuit)
-
----
-
-## 3. Bilan des besoins énergétiques
-
-### 3.1 Énergie totale nécessaire
-- Correspond à la consommation totale de la maison
-
----
-
-### 3.2 Panneaux solaires
-
-#### Hypothèse
-- 1 panneau produit 40% de l’énergie qu’il fournit
-
-#### Exemple
-- Besoin : 1000W  
-- Nécessaire : 2500W de panneaux solaires
-
-#### Répartition de la production
-- Journée (6h - 17h) :
-  - Alimentation des appareils
-  - Stockage dans la batterie
-- Soir (17h - 19h) :
-  - Production réduite à 50%
-
-#### Hypothèse de production horaire
-- Production totale journalière = production horaire × nombre d’heures
-- Exemple :
-  - 2500W / 11h = 227W par heure
-
----
-
-### 3.3 Batterie de stockage
-
-#### Utilisation
-- Nuit
-- Journées nuageuses
-
-#### Capacité
-- Consommation nocturne majorée de 50%
-- Exemple :
-  - Consommation nuit : 500W  
-  - Capacité batterie : 750W
-
-#### Fonctionnement
-- Journée :
-  - Recharge continue par les panneaux
-- Limite :
-  - Batterie pleine → perte d’énergie produite
-
----
-
-### 3.4 Résultats attendus
-
-- Consommation totale de la maison
-- Puissance totale des panneaux solaires nécessaires
-- Capacité de batterie requise pour la nuit (avec marge de 50%)
-
----
-
-## 4. Technologies utilisées
-
-- Python (application desktop)
-- SQL Server
-
----
-
-## 5. Structure de la base de données (Branche Dev)
-
-### 5.1 Tables de configuration
-
-#### TimeSlot
-- Créneaux horaires :
-  - Jour (6h - 17h)
-  - Soir (17h - 19h)
-  - Nuit (19h - 6h)
-
-#### SystemConfiguration
-- GridVoltageV : 230V
-- SolarPanelEfficiencyPct : 40%
-- BatteryOvercapacityPct : 50%
-
----
-
-### 5.2 Tables matériels
-
-#### DeviceType
-- Catégories d’appareils
-
-#### Device
-- Appareils de la maison
-- PowerW
-- Statut : ACTIF, INACTIF, MAINTENANCE
-- Date d’installation
-
-#### DeviceUsageSchedule
-- Programme d’utilisation quotidien
-- DailyUsageHours par tranche horaire
-
----
-
-### 5.3 Tables consommation et production
-
-#### EnergyConsumption
-- Historique de consommation
-- EnergyConsumedWh
-- DurationHours
-- Lié à Device et TimeSlot
-
-#### SolarPanelProduction
-- Production journalière
-- TotalPanelCapacityW
-- ProductionPercentage
-- EnergyProducedWh (calculée)
-
-#### BatteryStorage
-- Batteries
-- TotalCapacityWh
-- CurrentChargeWh
-- ChargingEfficiencyPct : 95%
-- Statut : ACTIF, MAINTENANCE, DEFAUT
-
-#### BatteryMovement
-- Historique des charges/décharges
-- MovementType : CHARGE / DECHARGE
-- ChargeBeforeWh / ChargeAfterWh
-
----
-
-### 5.4 Vues de calcul
-
-#### vw_DeviceUsageSchedule
-- Agrégation :
-  - Appareils
-  - Utilisation
-  - Créneaux horaires
-- Calcul :
-  - DailyEnergyConsumptionWh = PowerW × DailyUsageHours
-
-#### vw_EnergyBalance
-- Bilan énergétique global
-- TotalConsumptionWh vs TotalProductionWh
-- Calcul automatique :
-  - Besoin en panneaux solaires
-  - Capacité batterie
-- EnergyBalanceWh :
-  - Production - consommation
-
----
-
-## 6. CI/CD (Desktop Python + SQL Server Docker)
-
-### 6.1 Objectif
-
-Automatiser :
-- Les vérifications de connexion à la base
-- Le build de l’application
-
----
-
-### 6.2 CI
-
-- Lancement de SQL Server avec Docker Compose
-- Attente du healthcheck du conteneur
-- Vérification de la connexion Python vers SQL Server
-- Vérification des données d’initialisation
-
----
-
-### 6.3 CD
-
-- Build de l’application desktop Python (exécutable Windows)
-- Publication en artifact GitHub Actions
-
----
-
-### 6.4 Fichiers
-
-- `.github/workflows/ci-cd.yml`
-- `ci/check_db_connection.py`
-- `requirements-dev.txt`
-
----
-
-### 6.5 Déclenchement
-
-- Push / Pull Request sur `dev` et `main`
-- Release (pour le build CD)
-- Exécution manuelle (`workflow_dispatch`)
-
----
-
-## 7. Gestion de la connexion SQL
-
-### 7.1 Module de connexion
-
-- Fichier : `connection/server_connection.py`
-- Classe : `ServerConnect`
-
-Méthodes :
-- `getConnection()`
-- `commit()`
-- `rollback()`
-- `Disconnect()`
-
-Import :
-```python
-from connection import ServerConnect
-```
-
-### 7.3.2 Variables d'environnement (.env)
-
-Le fichier `.env` charge automatiquement les paramètres de connexion :
+Variables supportees (`.env`):
 
 ```env
-SQL_SERVER_HOST=sqlserver           # Hostname du service SQL Server Docker
-SQL_SERVER_PORT=1433                # Port SQL Server (défaut 1433)
-SQL_USER=sa                         # Utilisateur SQL Server
-SQL_PASSWORD=Dev12345               # Mot de passe SQL
-SA_PASSWORD=SolarDev!2026           # Fallback si SQL_PASSWORD absent
-DATABASE_NAME=SolarDB               # Nom de la base de données
+SQL_SERVER_HOST=sqlserver
+SQL_SERVER_PORT=1433
+SQL_USER=sa
+SQL_PASSWORD=SolarDev!2026
+SA_PASSWORD=SolarDev!2026
+DATABASE_NAME=solar
 ```
 
-**Comportement** :
-- Normalisé au démarrage : `sqlserver` → `127.0.0.1` pour Docker local
-- Chargé via `app.config.load_dotenv_file()` dans `main.py`
+Comportement local:
+- si `SQL_SERVER_HOST=sqlserver`, l'application le normalise en `127.0.0.1` pour l'execution locale hors conteneur.
 
-### 7.3.3 Gestion des transactions
+## 7. Lancement local
 
-Chaque opération CRUD encapsule les transactions :
-```python
-def execute(self, sql: str, params: tuple = ()) -> None:
-    conn = self.connector.getConnection()
-    with conn.cursor() as cursor:
-        cursor.execute(sql, params)
-    self.connector.commit()
-```
-
-En cas d'erreur, la méthode `_safe()` dans `SolarApp` effectue un `rollback()` auto.
-
----
-
-## 8. Historique de refactorisation (Branche actuelle)
-
-### 8.1 Renommage des fichiers CRUD
-
-Les fichiers CRUD ont été renommés pour simplifier la convention de nommage :
-
-- ❌ `base_crud.py` → ✅ `base.py`
-- ❌ `device_crud.py` → ✅ `device.py`
-- ❌ `device_type_crud.py` → ✅ `device_type.py`
-- ❌ `timeslot_crud.py` → ✅ `timeslot.py`
-- ❌ `device_usage_schedule_crud.py` → ✅ `device_usage_schedule.py`
-- ❌ `energy_consumption_crud.py` → ✅ `energy_consumption.py`
-- ❌ `system_configuration_crud.py` → ✅ `system_configuration.py`
-
-**Bénéfices** :
-- Noms plus courts et lisibles
-- Import simplifié
-- Cohérence avec les bonnes pratiques Python
-
-### 8.2 Commits de refactorisation
-
-5 commits groupés par fonctionnalité :
-
-1. **feat: Connection module and configuration**
-   - Module `ServerConnect` avec gestion des transactions
-   - Configuration du chargement d'environnement
-   - Normalisation du hostname Docker
-
-2. **feat: Data access layer (CRUD)**
-   - Classes de base et modèles CRUD pour tous les domaines
-   - Opérations de lecture/écriture SQL Server
-   - Requêtes conformes aux contraintes d'agrégation SQL Server
-
-3. **feat: Business logic layer (Services)**
-   - `EnergySpecService` pour les calculs d'énergie
-   - Formule de calcul panneau solaire (rendement)
-   - Formule de batterie (surcharge)
-
-4. **feat: User interface layer (UI)**
-   - SolarApp Tkinter à 5 onglets
-   - Liaison entre UI et CRUD
-   - Verrouillage progressif des fonctionnalités
-   - Gestion des erreurs avec rollback
-
-5. **chore: Application orchestration and entry point**
-   - Orchestrateur `main.py` minimal
-   - Separation of Concerns complète
-
-### 8.3 Validation
-
-Tous les fichiers compilent sans erreur :
-```bash
-python -m py_compile main.py app/ui/solar_app.py app/services/energy_spec_service.py app/crud/base.py
-```
-
----
-
-## 9. Guide de démarrage
-
-### 9.1 Prérequis
+### 7.1 Prerequis
 
 - Python 3.8+
-- SQL Server 2019+ (Docker recommandé)
-- `pymssql>=2.3.5`
+- Docker + Docker Compose
+- SQL Server (via conteneur)
 
-### 9.2 Installation
+### 7.2 Installation
 
 ```bash
-# Cloner le repo
 git clone <repo-url>
 cd Solar
-
-# Installer les dépendances
 pip install -r requirements-dev.txt
+```
 
-# Démarrer SQL Server Docker
-docker compose up -d
+### 7.3 Demarrage SQL Server
 
-# Vérifier la connexion
+```bash
+docker compose up -d sqlserver
+```
+
+### 7.4 Verification connexion
+
+```bash
 python ci/check_db_connection.py
 ```
 
-### 9.3 Lancement
+### 7.5 Lancement application
 
 ```bash
 python main.py
 ```
 
-La fenêtre Tkinter s'ouvre alors avec les 5 onglets de gestion énergétique.
+## 8. CI/CD
 
-### 9.4 Workflow type
+Workflow GitHub Actions: `.github/workflows/ci-cd.yml`
 
-1. **Ajouter des appareils** (onglet Matériels)
-2. **Paramétrer les créneaux horaires** (onglet Créneaux) — pré-remplis
-3. **Définir l'usage quotidien** (onglet Usage) — durée par créneau
-4. **Consulter l'historique** (onglet Historique) — données passées
-5. **Générer le bilan** (onglet Bilan) — panneaux et batterie nécessaires
+### 8.1 CI
 
----
+- Demarrage SQL Server Docker.
+- Verification healthcheck.
+- Initialisation SQL (`01-schema.sql`, `02-data.sql`).
+- Verification de connexion et des donnees via `ci/check_db_connection.py`.
 
-## 10. Réinitialisation des données depuis l'interface
+### 8.2 CD
 
-Des boutons de réinitialisation sont disponibles dans les onglets pour éviter un script manuel à chaque purge.
+- Build Windows de l'application desktop via PyInstaller.
+- Publication de l'executable en artifact.
 
-### 10.1 Onglet Matériels
+### 8.3 Triggers
 
-- Bouton : `Reinitialiser`
-- Supprime : `Device`
-- Supprime aussi les dépendances : `DeviceUsageSchedule`, `EnergyConsumption`
-- Conserve : `DeviceType`
+- Push/Pull Request sur `main` et `dev`
+- `workflow_dispatch`
+- `release` (publication)
 
-### 10.2 Onglet Créneaux
+## 9. Dependances de dev
 
-- Bouton : `Reinitialiser`
-- Supprime : `TimeSlot`
-- Supprime aussi les dépendances : `DeviceUsageSchedule`, `EnergyConsumption`, `SolarPanelProduction`, `BatteryMovement`
-
-### 10.3 Onglet Usage
-
-- Bouton : `Reinitialiser`
-- Supprime : `DeviceUsageSchedule`
-
-### 10.4 Onglet Historique
-
-- Bouton : `Reinitialiser`
-- Supprime : `EnergyConsumption`
-
-### 10.5 Onglet Bilan
-
-- Bouton : `Reinitialiser tout`
-- Effet : reset global des données fonctionnelles des onglets (hors `DeviceType`)
-
-Toutes les actions sont protégées par une confirmation utilisateur.
-
----
-
-## 11. Exécuter un script SQL à chaud (sans redémarrer SQL Server)
-
-Runner inclus : `database/scripts/run-sql-script.ps1`
-
-Exemple d'exécution :
-
-```powershell
-$env:SA_PASSWORD = "SolarDev!2026"
-.\database\scripts\run-sql-script.ps1 -SqlFile ".\database\scripts\truncate-usage-and-device-insert-3-tv.sql" -Database "solar"
-```
-
-Script de seed ciblé : `database/scripts/truncate-usage-and-device-insert-3-tv.sql`
-
-Ce script :
-- vide `EnergyConsumption`, `DeviceUsageSchedule`, `Device`
-- insère 3 TV : 23W, 20W, 10W
-- configure les créneaux :
-  - TV001 -> NUIT (2h)
-  - TV002 -> SOIR (2h)
-  - TV003 -> JOUR (1h)
-
-Résultat attendu :
-- JOUR = 10
-- SOIR = 40
-- NUIT = 46
+- `pymssql==2.3.5`
+- `pytest==8.3.5`
+- `pyinstaller==6.13.0`

@@ -1,3 +1,10 @@
+# fichier de documentation  
+*.md
+!README.md
+
+# fichier de test 
+*.csv
+
 # fichier volumineux database
 database/log/
 database/secrets/
@@ -14,3 +21,4 @@ TODO
 
 # fichier cache
 __pycache__
+
