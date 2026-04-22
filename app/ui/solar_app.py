@@ -34,6 +34,7 @@ class SolarApp:
         self.device_type_map: dict[str, int] = {}
         self.device_type_role_map: dict[str, str] = {}
         self.slot_duration_map: dict[str, float] = {}
+        self.slot_bounds_map: dict[str, tuple[int, int]] = {}
         self.config_map: dict[str, int] = {}
         self.selected_config_id: int | None = None
         self.last_panel_need_w: float = 0.0
@@ -184,11 +185,15 @@ class SolarApp:
         self.usage_device_var = tk.StringVar()
         self.usage_slot_var = tk.StringVar()
         self.usage_hours_var = tk.StringVar()
+        self.usage_start_time_var = tk.StringVar()
+        self.usage_end_time_var = tk.StringVar()
         self.usage_enabled_var = tk.BooleanVar(value=True)
 
         self.usage_device_combo = self._combo(left, "Materiel", self.usage_device_var)
         self.usage_slot_combo = self._combo(left, "Creneau", self.usage_slot_var)
         self._entry(left, "Heures/jour (h)", self.usage_hours_var)
+        self._entry(left, "Heure debut (HH:MM)", self.usage_start_time_var)
+        self._entry(left, "Heure fin (HH:MM)", self.usage_end_time_var)
         ttk.Checkbutton(left, text="Actif", variable=self.usage_enabled_var).pack(anchor="w", pady=(4, 8))
 
         act = ttk.Frame(left)
@@ -197,14 +202,16 @@ class SolarApp:
         ttk.Button(act, text="Rafraichir", command=lambda: self._safe(self.refresh_usage)).pack(side="left", padx=6)
         ttk.Button(act, text="Reinitialiser", command=lambda: self._safe(self.truncate_usage)).pack(side="left", padx=6)
 
-        cols = ("id", "device", "slot", "hours", "consumption", "enabled")
+        cols = ("id", "device", "slot", "hours", "consumption", "start_time", "end_time", "enabled")
         self.usage_tree = ttk.Treeview(right, columns=cols, show="headings", height=18)
         for col, title, width in [
             ("id", "ID", 60),
-            ("device", "Materiel", 220),
+            ("device", "Materiel", 200),
             ("slot", "Creneau", 130),
             ("hours", "Heures", 90),
             ("consumption", "Conso Wh", 110),
+            ("start_time", "Debut", 70),
+            ("end_time", "Fin", 70),
             ("enabled", "Actif", 80),
         ]:
             self.usage_tree.heading(col, text=title)
@@ -325,6 +332,12 @@ class SolarApp:
         self.panel_best_cost_var = tk.StringVar(value="0 Ar")
         self.panel_best_count_var = tk.StringVar(value="0")
         self.panel_best_energy_var = tk.StringVar(value="0 W")
+        self.surplus_production_var = tk.StringVar(value="0 Wh")
+        self.surplus_consumption_var = tk.StringVar(value="0 Wh")
+        self.surplus_energy_var = tk.StringVar(value="0 Wh")
+        self.surplus_price_var = tk.StringVar(value="0.0000 Ar/Wh")
+        self.surplus_revenue_var = tk.StringVar(value="0 Ar")
+        self.net_cost_var = tk.StringVar(value="0 Ar")
 
         self._metric(cards, 0, "Depense totale", self.total_var)
         self._metric(cards, 1, "Panneaux requis", self.panel_var)
@@ -359,6 +372,28 @@ class SolarApp:
         ttk.Label(calc_detail, textvariable=self.panel_recommendation_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=1, sticky="w", pady=2)
         ttk.Label(calc_detail, text="Ratio prix / energie").grid(row=4, column=2, sticky="w", padx=(20, 8), pady=2)
         ttk.Label(calc_detail, textvariable=self.panel_ratio_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=3, sticky="w", pady=2)
+
+        surplus_frame = ttk.LabelFrame(self.tab_balance, text="Surplus solaire monétisable", padding=10)
+        surplus_frame.pack(fill="x", pady=(0, 8))
+
+        ttk.Label(surplus_frame, text="Energie produite (8h-17h)").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(surplus_frame, textvariable=self.surplus_production_var, font=("Segoe UI", 10, "bold")).grid(row=0, column=1, sticky="w", pady=2)
+        ttk.Label(surplus_frame, text="Energie consommee (8h-17h)").grid(row=0, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(surplus_frame, textvariable=self.surplus_consumption_var, font=("Segoe UI", 10, "bold")).grid(row=0, column=3, sticky="w", pady=2)
+
+        ttk.Label(surplus_frame, text="Surplus revendable").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(surplus_frame, textvariable=self.surplus_energy_var, font=("Segoe UI", 10, "bold")).grid(row=1, column=1, sticky="w", pady=2)
+        ttk.Label(surplus_frame, text="Prix de vente").grid(row=1, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(surplus_frame, textvariable=self.surplus_price_var, font=("Segoe UI", 10, "bold")).grid(row=1, column=3, sticky="w", pady=2)
+
+        ttk.Label(surplus_frame, text="Revenu estime").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(surplus_frame, textvariable=self.surplus_revenue_var, font=("Segoe UI", 10, "bold")).grid(row=2, column=1, sticky="w", pady=2)
+
+        ttk.Separator(surplus_frame, orient="horizontal").grid(row=3, column=0, columnspan=4, sticky="ew", pady=(8, 8))
+        ttk.Label(surplus_frame, text="Cout total panneaux").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(surplus_frame, textvariable=self.panel_best_cost_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=1, sticky="w", pady=2)
+        ttk.Label(surplus_frame, text="Cout net (apres revenu surplus)").grid(row=4, column=2, sticky="w", padx=(20, 8), pady=2)
+        ttk.Label(surplus_frame, textvariable=self.net_cost_var, font=("Segoe UI", 10, "bold")).grid(row=4, column=3, sticky="w", pady=2)
 
         detail = ttk.LabelFrame(self.tab_balance, text="Besoin en energie par tranche", padding=10)
         detail.pack(fill="both", expand=True)
@@ -495,20 +530,9 @@ class SolarApp:
         self.status_var.set("Donnees chargees")
 
     def _update_step_lock(self) -> None:
-        devices = int(self.recap_device_var.get())
-        slots = int(self.recap_slot_var.get())
-        if devices == 0:
-            self.notebook.tab(2, state="disabled")
-            self.notebook.tab(3, state="disabled")
-            self.notebook.tab(4, state="disabled")
-        elif slots == 0:
-            self.notebook.tab(2, state="disabled")
-            self.notebook.tab(3, state="normal")
-            self.notebook.tab(4, state="disabled")
-        else:
-            self.notebook.tab(2, state="normal")
-            self.notebook.tab(3, state="normal")
-            self.notebook.tab(4, state="normal")
+        self.notebook.tab(2, state="normal")
+        self.notebook.tab(3, state="normal")
+        self.notebook.tab(4, state="normal")
 
     def refresh_device_types(self) -> None:
         rows = self.device_type_crud.list_types_with_role()
@@ -547,12 +571,14 @@ class SolarApp:
         self.slot_tree.delete(*self.slot_tree.get_children())
         self.slot_map.clear()
         self.slot_duration_map.clear()
+        self.slot_bounds_map.clear()
         labels = []
         for row in rows:
             self.slot_tree.insert("", "end", values=row)
             label = f"{row[1]} ({row[2]}-{row[3]})"
             self.slot_map[label] = row[0]
             self.slot_duration_map[label] = self._timeslot_duration_hours(int(row[2]), int(row[3]))
+            self.slot_bounds_map[label] = (int(row[2]), int(row[3]))
             labels.append(label)
         self.usage_slot_combo["values"] = labels
         if labels and not self.usage_slot_var.get():
@@ -867,6 +893,8 @@ class SolarApp:
         device_label = self.usage_device_var.get().strip()
         slot_label = self.usage_slot_var.get().strip()
         hours = float(self.usage_hours_var.get())
+        start_time_str = self.usage_start_time_var.get().strip()
+        end_time_str = self.usage_end_time_var.get().strip()
         enabled = 1 if self.usage_enabled_var.get() else 0
 
         if device_label not in self.device_map:
@@ -881,11 +909,38 @@ class SolarApp:
         if hours > max_slot_hours:
             raise ValueError(f"DailyUsageHours depasse la duree du creneau selectionne ({max_slot_hours:.2f} h max).")
 
+        if (start_time_str and not end_time_str) or (end_time_str and not start_time_str):
+            raise ValueError("Les champs Heure debut et Heure fin doivent etre renseignes ensemble.")
+
+        usage_start_time = None
+        usage_end_time = None
+        if start_time_str:
+            start_minutes = self._parse_hhmm_to_minutes(start_time_str, "Heure debut")
+            end_minutes = self._parse_hhmm_to_minutes(end_time_str, "Heure fin")
+
+            bounds = self.slot_bounds_map.get(slot_label)
+            if bounds is None:
+                raise ValueError("Plage du creneau introuvable.")
+            slot_start, slot_end = bounds
+
+            if not self._is_minute_in_slot(start_minutes, slot_start, slot_end):
+                raise ValueError("Heure debut hors plage du creneau selectionne.")
+            slot_end_minutes = (slot_end * 60) % (24 * 60)
+            if not (self._is_minute_in_slot(end_minutes, slot_start, slot_end) or end_minutes == slot_end_minutes):
+                raise ValueError("Heure fin hors plage du creneau selectionne.")
+            if start_minutes == end_minutes:
+                raise ValueError("Heure debut et heure fin ne peuvent pas etre identiques.")
+
+            usage_start_time = f"{start_minutes // 60:02d}:{start_minutes % 60:02d}:00"
+            usage_end_time = f"{end_minutes // 60:02d}:{end_minutes % 60:02d}:00"
+
         self.usage_crud.upsert_usage(
             device_id=self.device_map[device_label],
             timeslot_id=self.slot_map[slot_label],
             daily_usage_hours=hours,
             is_enabled=enabled,
+            usage_start_time=usage_start_time,
+            usage_end_time=usage_end_time,
         )
 
         self.refresh_usage()
@@ -895,10 +950,10 @@ class SolarApp:
     def generate_spec(self) -> None:
         self.refresh_recap()
 
-        if int(self.recap_device_var.get()) == 0:
-            raise ValueError("Ajoute au moins un materiel avant generation.")
-        if int(self.recap_slot_var.get()) == 0:
-            raise ValueError("Ajoute au moins un creneau avant generation.")
+        if int(self.recap_device_var.get()) == 0 or int(self.recap_slot_var.get()) == 0:
+            self._clear_balance_outputs()
+            self.status_var.set("Aucune donnee metier en base: bilan initialise a zero.")
+            return
 
         slot_rows = self.usage_crud.list_consumption_by_slot()
         slot_hours_by_name = {
@@ -907,7 +962,9 @@ class SolarApp:
         }
         active_config = self.config_crud.get_active()
         if not active_config:
-            raise ValueError("Aucune configuration active dans SystemConfiguration.")
+            self._clear_balance_outputs()
+            self.status_var.set("Aucune configuration active: bilan initialise a zero.")
+            return
 
         spec = self.spec_service.build_spec(
             slot_rows,
@@ -937,13 +994,64 @@ class SolarApp:
 
         self.refresh_panel_types()
 
+        prix_vente = float(self.config_crud.get_active_selling_price())
+        energie_produite_8_17 = max(float(spec.get("panel_w", 0.0)), 0.0) * 9.0
+        energie_consommee_8_17 = max(float(by_slot.get("JOUR", 0.0)), 0.0)
+        surplus_wh = max(0.0, energie_produite_8_17 - energie_consommee_8_17)
+        revenu_ar = surplus_wh * prix_vente
+        panel_cost_ar = float(self.panel_best_option["total_cost_ar"]) if self.panel_best_option else 0.0
+        cout_net_ar = max(0.0, panel_cost_ar - revenu_ar)
+
+        self.surplus_production_var.set(f"{energie_produite_8_17:.2f} Wh")
+        self.surplus_consumption_var.set(f"{energie_consommee_8_17:.2f} Wh")
+        self.surplus_energy_var.set(f"{surplus_wh:.2f} Wh")
+        self.surplus_price_var.set(f"{prix_vente:.4f} Ar/Wh")
+        self.surplus_revenue_var.set(f"{revenu_ar:.2f} Ar")
+        self.net_cost_var.set(f"{cout_net_ar:.2f} Ar")
+
         self.status_var.set("Bilan energetique genere")
 
     def _clear_balance_outputs(self) -> None:
         self.total_var.set("0 Wh")
         self.panel_var.set("0 W")
         self.battery_var.set("0 Wh")
+        self.day_need_var.set("0 Wh")
+        self.evening_need_var.set("0 Wh")
+        self.evening_solar_var.set("0 Wh")
+        self.evening_battery_var.set("0 Wh")
+        self.night_need_var.set("0 Wh")
+        self.charge_window_var.set("0 h")
+        self.charge_energy_var.set("0 W")
+        self.panel_best_cost_var.set("0 Ar")
+        self.surplus_production_var.set("0 Wh")
+        self.surplus_consumption_var.set("0 Wh")
+        self.surplus_energy_var.set("0 Wh")
+        self.surplus_price_var.set("0.0000 Ar/Wh")
+        self.surplus_revenue_var.set("0 Ar")
+        self.net_cost_var.set("0 Ar")
         self.balance_tree.delete(*self.balance_tree.get_children())
+
+    @staticmethod
+    def _parse_hhmm_to_minutes(value: str, label: str) -> int:
+        parts = value.split(":")
+        if len(parts) != 2:
+            raise ValueError(f"{label}: format invalide (attendu HH:MM)")
+        try:
+            hour = int(parts[0])
+            minute = int(parts[1])
+        except ValueError as exc:
+            raise ValueError(f"{label}: heure invalide") from exc
+        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+            raise ValueError(f"{label}: heure invalide (HH 0-23, MM 0-59)")
+        return hour * 60 + minute
+
+    @staticmethod
+    def _is_minute_in_slot(minute_of_day: int, start_hour: int, end_hour: int) -> bool:
+        start_min = start_hour * 60
+        end_min = end_hour * 60
+        if end_min > start_min:
+            return start_min <= minute_of_day < end_min
+        return minute_of_day >= start_min or minute_of_day < end_min
 
     def reset_devices_data(self) -> None:
         if not messagebox.askyesno(

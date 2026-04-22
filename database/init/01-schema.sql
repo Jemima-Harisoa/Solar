@@ -124,6 +124,8 @@ BEGIN
         DeviceId        INT           NOT NULL,
         TimeSlotId      TINYINT       NOT NULL,
         DailyUsageHours DECIMAL(5,2)  NOT NULL,
+        UsageStartTime  TIME          NULL,
+        UsageEndTime    TIME          NULL,
         IsEnabled       BIT           NOT NULL DEFAULT 1,
         CreatedAt       DATETIME2(0)  NOT NULL DEFAULT SYSUTCDATETIME(),
 
@@ -134,6 +136,18 @@ BEGIN
     );
 END;
 GO
+
+-- Colonnes fines d'usage horaire (idempotent)
+IF COL_LENGTH(N'dbo.DeviceUsageSchedule', N'UsageStartTime') IS NULL
+    ALTER TABLE dbo.DeviceUsageSchedule ADD UsageStartTime TIME NULL;
+GO
+
+IF COL_LENGTH(N'dbo.DeviceUsageSchedule', N'UsageEndTime') IS NULL
+    ALTER TABLE dbo.DeviceUsageSchedule ADD UsageEndTime TIME NULL;
+GO
+
+-- Validation de coherence UsageStartTime/UsageEndTime:
+-- geree cote service pour couvrir les creneaux traversant minuit (ex: 22:00-02:00).
 
 
 /* =========================
@@ -229,6 +243,93 @@ BEGIN
         CONSTRAINT CK_BatteryMovement_Charge CHECK (ChargeBeforeWh  >= 0 AND ChargeAfterWh >= 0)
     );
 END;
+GO
+
+-- Table : Types de panneaux (centralisee ici pour schema complet)
+IF OBJECT_ID(N'dbo.PanelType', N'U') IS NULL
+BEGIN
+    CREATE TABLE PanelType (
+        PanelTypeId      INT            IDENTITY PRIMARY KEY,
+        TypeName         NVARCHAR(80)   NOT NULL UNIQUE,
+        UnitEnergyW      DECIMAL(10,2)  NOT NULL,
+        ExploitablePct   DECIMAL(5,2)   NOT NULL,
+        UsableEnergyWh   AS (UnitEnergyW * ExploitablePct / 100.0) PERSISTED,
+        UnitPriceAr      DECIMAL(12,2)  NOT NULL,
+        PeakPowerWh      DECIMAL(10,2)  NULL,
+        Description      NVARCHAR(250)  NULL,
+        CreatedAt        DATETIME2(0)   NOT NULL DEFAULT SYSUTCDATETIME(),
+
+        CONSTRAINT CK_PanelType_Exploit CHECK (ExploitablePct > 0 AND ExploitablePct <= 100),
+        CONSTRAINT CK_PanelType_Energy  CHECK (UnitEnergyW > 0),
+        CONSTRAINT CK_PanelType_Price   CHECK (UnitPriceAr >= 0)
+    );
+END;
+GO
+
+-- Compatibilite ascendante: garder la colonne historique UsableEnergyW si absente
+IF COL_LENGTH(N'dbo.PanelType', N'UsableEnergyW') IS NULL
+    ALTER TABLE dbo.PanelType ADD UsableEnergyW AS (UnitEnergyW * ExploitablePct / 100.0) PERSISTED;
+GO
+
+IF COL_LENGTH(N'dbo.PanelType', N'UnitEnergyW') IS NULL
+    ALTER TABLE dbo.PanelType ADD UnitEnergyW DECIMAL(10,2) NOT NULL CONSTRAINT DF_PanelType_UnitEnergyW DEFAULT 1;
+GO
+
+IF COL_LENGTH(N'dbo.PanelType', N'ExploitablePct') IS NULL
+    ALTER TABLE dbo.PanelType ADD ExploitablePct DECIMAL(5,2) NOT NULL CONSTRAINT DF_PanelType_ExploitablePct DEFAULT 1;
+GO
+
+IF COL_LENGTH(N'dbo.PanelType', N'UsableEnergyWh') IS NULL
+    ALTER TABLE dbo.PanelType ADD UsableEnergyWh AS (UnitEnergyW * ExploitablePct / 100.0) PERSISTED;
+GO
+
+IF COL_LENGTH(N'dbo.PanelType', N'UnitPriceAr') IS NULL
+    ALTER TABLE dbo.PanelType ADD UnitPriceAr DECIMAL(12,2) NOT NULL CONSTRAINT DF_PanelType_UnitPriceAr DEFAULT 0;
+GO
+
+IF COL_LENGTH(N'dbo.PanelType', N'PeakPowerWh') IS NULL
+    ALTER TABLE dbo.PanelType ADD PeakPowerWh DECIMAL(10,2) NULL;
+GO
+
+-- Contraintes PanelType ajoutees avec guards
+IF NOT EXISTS (
+    SELECT 1 FROM sys.check_constraints
+    WHERE name = N'CK_PanelType_Exploit'
+      AND parent_object_id = OBJECT_ID(N'dbo.PanelType')
+)
+    ALTER TABLE dbo.PanelType
+    ADD CONSTRAINT CK_PanelType_Exploit CHECK (ExploitablePct > 0 AND ExploitablePct <= 100);
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.check_constraints
+    WHERE name = N'CK_PanelType_Energy'
+      AND parent_object_id = OBJECT_ID(N'dbo.PanelType')
+)
+    ALTER TABLE dbo.PanelType
+    ADD CONSTRAINT CK_PanelType_Energy CHECK (UnitEnergyW > 0);
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.check_constraints
+    WHERE name = N'CK_PanelType_Price'
+      AND parent_object_id = OBJECT_ID(N'dbo.PanelType')
+)
+    ALTER TABLE dbo.PanelType
+    ADD CONSTRAINT CK_PanelType_Price CHECK (UnitPriceAr >= 0);
+GO
+
+-- Nouveaux parametres de monetisation dans la configuration systeme
+IF COL_LENGTH(N'dbo.SystemConfiguration', N'EnergySellingPriceArWh') IS NULL
+    ALTER TABLE dbo.SystemConfiguration ADD EnergySellingPriceArWh DECIMAL(12,4) NOT NULL CONSTRAINT DF_SystemConfiguration_EnergySellingPriceArWh DEFAULT 0;
+GO
+
+IF COL_LENGTH(N'dbo.SystemConfiguration', N'SellingPriceStartDate') IS NULL
+    ALTER TABLE dbo.SystemConfiguration ADD SellingPriceStartDate DATE NULL;
+GO
+
+IF COL_LENGTH(N'dbo.SystemConfiguration', N'SellingPriceEndDate') IS NULL
+    ALTER TABLE dbo.SystemConfiguration ADD SellingPriceEndDate DATE NULL;
 GO
 
 

@@ -12,6 +12,8 @@ class DeviceUsageScheduleCrud(BaseCrud):
             """
             SELECT dus.UsageScheduleId, d.DeviceName, ts.SlotName, dus.DailyUsageHours,
                    (d.PowerW * dus.DailyUsageHours) AS DailyEnergyConsumptionWh,
+                   ISNULL(FORMAT(dus.UsageStartTime, 'HH:mm'), ''), 
+                   ISNULL(FORMAT(dus.UsageEndTime, 'HH:mm'), ''),
                    dus.IsEnabled
             FROM DeviceUsageSchedule dus
             INNER JOIN Device d ON d.DeviceId = dus.DeviceId
@@ -34,28 +36,33 @@ class DeviceUsageScheduleCrud(BaseCrud):
         )
         return float(rows[0][0])
 
-    def upsert_usage(self, device_id: int, timeslot_id: int, daily_usage_hours: float, is_enabled: int) -> None:
+    def upsert_usage(self, device_id: int, timeslot_id: int, daily_usage_hours: float, is_enabled: int, usage_start_time: str | None = None, usage_end_time: str | None = None) -> None:
+        # [SOLAR-DEFERRED] Étape 4: Support colonnes UsageStartTime/UsageEndTime
         self.execute(
             """
             IF EXISTS (SELECT 1 FROM DeviceUsageSchedule WHERE DeviceId = %s AND TimeSlotId = %s)
                 UPDATE DeviceUsageSchedule
-                SET DailyUsageHours = %s, IsEnabled = %s
+                SET DailyUsageHours = %s, IsEnabled = %s, UsageStartTime = %s, UsageEndTime = %s
                 WHERE DeviceId = %s AND TimeSlotId = %s
             ELSE
-                INSERT INTO DeviceUsageSchedule(DeviceId, TimeSlotId, DailyUsageHours, IsEnabled)
-                VALUES(%s, %s, %s, %s)
+                INSERT INTO DeviceUsageSchedule(DeviceId, TimeSlotId, DailyUsageHours, IsEnabled, UsageStartTime, UsageEndTime)
+                VALUES(%s, %s, %s, %s, %s, %s)
             """,
             (
                 device_id,
                 timeslot_id,
                 daily_usage_hours,
                 is_enabled,
+                usage_start_time,
+                usage_end_time,
                 device_id,
                 timeslot_id,
                 device_id,
                 timeslot_id,
                 daily_usage_hours,
                 is_enabled,
+                usage_start_time,
+                usage_end_time,
             ),
         )
 

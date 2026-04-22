@@ -134,5 +134,32 @@ class ConfigCrud(BaseCrud):
         rows = self.query("SELECT CAST(SCOPE_IDENTITY() AS INT) AS LastId")
         return int(rows[0][0]) if rows and rows[0][0] is not None else None
 
+    def get_active_selling_price(self) -> float:
+        """Retourner le prix de vente actif (Ar/Wh), ou 0 si non disponible."""
+        has_column = self.query(
+            """
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'SystemConfiguration'
+              AND COLUMN_NAME = 'EnergySellingPriceArWh'
+            """
+        )
+        if not has_column or int(has_column[0][0]) == 0:
+            return 0.0
+
+        rows = self.query(
+            """
+            SELECT TOP 1 ISNULL(CAST(EnergySellingPriceArWh AS FLOAT), 0)
+            FROM SystemConfiguration
+            WHERE IsActive = 1
+              AND (
+                    (SellingPriceStartDate IS NULL OR SellingPriceStartDate <= CAST(GETDATE() AS DATE))
+                AND (SellingPriceEndDate IS NULL OR SellingPriceEndDate >= CAST(GETDATE() AS DATE))
+              )
+            ORDER BY ConfigId DESC
+            """
+        )
+        return float(rows[0][0]) if rows else 0.0
+
 
 
