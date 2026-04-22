@@ -2,6 +2,12 @@ from app.crud.base import BaseCrud
 
 
 class DeviceTypeCrud(BaseCrud):
+    def truncate(self) -> bool:
+        """Vider la table DeviceType."""
+        self.execute("DELETE FROM Device WHERE 1=1")
+        self.execute("TRUNCATE TABLE DeviceType")
+        return True
+
     @staticmethod
     def infer_energy_role(type_name: str, category: str) -> str:
         name = (type_name or "").upper()
